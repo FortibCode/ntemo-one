@@ -30,21 +30,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#061224] flex items-center justify-center p-4 sm:p-8 relative overflow-hidden font-sans selection:bg-cyan-500 selection:text-white">
-      {/* Ambient background bokeh orbs matching NTÊMO blue palette */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#0284c7]/20 rounded-full blur-[130px] pointer-events-none" />
-      <div className="absolute top-1/2 -right-32 w-96 h-96 bg-[#0369a1]/25 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute -bottom-32 left-1/3 w-80 h-80 bg-[#38bdf8]/15 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-white flex items-center justify-center p-4 sm:p-8 relative overflow-hidden font-sans selection:bg-cyan-500 selection:text-white">
+      {/* Soft light ambient background glows in NTÊMO tones */}
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#e0f2fe]/60 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 -right-32 w-96 h-96 bg-[#f0f9ff] rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute -bottom-32 left-1/3 w-80 h-80 bg-[#e0f2fe]/40 rounded-full blur-[100px] pointer-events-none" />
 
-      {/* Floating bokeh particles */}
-      <div className="absolute top-12 left-1/4 w-32 h-32 rounded-full bg-white/[0.02] border border-white/[0.04] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-16 right-1/4 w-48 h-48 rounded-full bg-white/[0.02] border border-white/[0.04] pointer-events-none" />
+      {/* Floating soft circles on white background */}
+      <div className="absolute top-12 left-1/4 w-32 h-32 rounded-full bg-[#0284c7]/[0.03] border border-[#0284c7]/[0.06] pointer-events-none animate-pulse" />
+      <div className="absolute bottom-16 right-1/4 w-48 h-48 rounded-full bg-[#0284c7]/[0.03] border border-[#0284c7]/[0.06] pointer-events-none" />
 
       {/* Main Elevated Modal Card */}
-      <div className="w-full max-w-5xl bg-[#0b1e36] rounded-[36px] sm:rounded-[44px] shadow-[0_25px_70px_rgba(2,132,199,0.18)] border border-slate-700/50 flex flex-col lg:flex-row overflow-hidden relative z-10 backdrop-blur-xl">
+      <div className="w-full max-w-5xl bg-[#0b1e36] rounded-[36px] sm:rounded-[44px] shadow-[0_20px_60px_-10px_rgba(2,132,199,0.22)] border border-slate-200/90 flex flex-col lg:flex-row overflow-hidden relative z-10">
         
-        {/* LEFT SECTION (Light Canvas with NTÊMO Branding & December 2026 Illustration) */}
-        <div className="relative bg-[#f8fafc] text-slate-800 flex flex-col justify-between p-8 sm:p-12 lg:w-[52%] overflow-hidden z-20">
+        {/* LEFT SECTION (Pure White Canvas with NTÊMO Branding & December 2026 Illustration) */}
+        <div className="relative bg-white text-slate-800 flex flex-col justify-between p-8 sm:p-12 lg:w-[52%] overflow-hidden z-20">
           
           {/* Top Brand Header with NTÊMO Logo */}
           <div className="relative z-10 flex items-center space-x-3.5">
@@ -175,7 +175,7 @@ export default function LoginPage() {
           {/* Organic Wave / Droplet Separator seamlessly connecting into Dark Right Panel */}
           <div className="hidden lg:block absolute -top-1 -bottom-1 -right-16 w-32 pointer-events-none z-10">
             <svg
-              className="h-full w-full fill-[#f8fafc]"
+              className="h-full w-full fill-white"
               viewBox="0 0 100 400"
               preserveAspectRatio="none"
             >
