@@ -3,6 +3,8 @@ import 'core/api/api_client.dart';
 import 'core/constants/app_constants.dart';
 import 'features/attendance/screens/attendance_scan_screen.dart';
 import 'features/badge/screens/virtual_badge_screen.dart';
+import 'features/leaves/screens/leaves_screen.dart';
+import 'features/profile/screens/profile_screen.dart';
 
 void main() {
   runApp(const NtemoOneApp());
@@ -61,7 +63,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             icon: const Icon(Icons.notifications_none_outlined),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Aucune nouvelle alerte')),
+                const SnackBar(content: Text('Aucune nouvelle notification.')),
               );
             },
           ),
@@ -72,8 +74,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         children: [
           AttendanceScanScreen(apiClient: _apiClient),
           VirtualBadgeScreen(apiClient: _apiClient),
-          const PlaceholderScreen(title: 'Demandes de Congés', icon: Icons.calendar_month),
-          const PlaceholderScreen(title: 'Profil & Pièces RH', icon: Icons.person),
+          LeavesScreen(apiClient: _apiClient),
+          ProfileScreen(apiClient: _apiClient),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -100,29 +102,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             selectedIcon: Icon(Icons.person),
             label: 'Profil',
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class PlaceholderScreen extends StatelessWidget {
-  final String title;
-  final IconData icon;
-
-  const PlaceholderScreen({super.key, required this.title, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('Synchronisé avec l\'API REST NTEMO ONE', style: TextStyle(color: Colors.grey)),
         ],
       ),
     );

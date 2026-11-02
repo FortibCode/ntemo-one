@@ -234,3 +234,4 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
     );
   }
 }
+
