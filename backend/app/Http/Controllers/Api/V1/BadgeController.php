@@ -18,6 +18,31 @@ class BadgeController extends Controller
     ) {}
 
     /**
+     * Liste des badges de l'organisation (Admin / RH).
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $query = Badge::where('organization_id', $request->user()->organization_id)
+            ->with(['employee.department', 'employee.position', 'template'])
+            ->latest('created_at');
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->whereHas('employee', function ($q) use ($search) {
+                $q->where('first_name', 'ilike', "%{$search}%")
+                  ->orWhere('last_name', 'ilike', "%{$search}%")
+                  ->orWhere('matricule', 'ilike', "%{$search}%");
+            });
+        }
+
+        return response()->json($query->paginate(20));
+    }
+
+    /**
      * Obtenir le badge virtuel actif de l'employé connecté (Mobile / Web).
      */
     public function myVirtualBadge(Request $request): JsonResponse

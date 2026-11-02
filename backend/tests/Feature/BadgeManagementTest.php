@@ -143,5 +143,17 @@ class BadgeManagementTest extends TestCase
         $verifyResponse->assertStatus(422)
             ->assertJsonPath('is_valid', false);
     }
+
+    public function test_can_list_organization_badges(): void
+    {
+        $this->badgeService->issueBadge($this->employee, null, $this->hrUser);
+
+        $response = $this->actingAs($this->hrUser, 'sanctum')
+            ->getJson('/api/v1/badges');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure(['data', 'current_page', 'total']);
+        $this->assertCount(1, $response->json('data'));
+    }
 }
 

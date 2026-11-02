@@ -19,6 +19,30 @@ class ProjectTimesheetController extends Controller
     ) {}
 
     /**
+     * Liste des saisies de temps de l'organisation (Admin / Managers).
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $query = TimeEntry::where('organization_id', $request->user()->organization_id)
+            ->with(['employee.department', 'project', 'task', 'approver'])
+            ->latest('date');
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('project_id')) {
+            $query->where('project_id', $request->project_id);
+        }
+
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', $request->employee_id);
+        }
+
+        return response()->json($query->paginate(25));
+    }
+
+    /**
      * Liste des projets de l'organisation.
      */
     public function projects(Request $request): JsonResponse

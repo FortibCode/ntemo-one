@@ -43,6 +43,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/attendance/my-records', [AttendanceController::class, 'myAttendances']);
 
             // Module Badges Virtuels & Contrôle
+            Route::get('/badges', [BadgeController::class, 'index']);
             Route::get('/badges/my-badge', [BadgeController::class, 'myVirtualBadge']);
             Route::post('/badges/issue', [BadgeController::class, 'issue']);
             Route::post('/badges/{badge}/revoke', [BadgeController::class, 'revoke']);
@@ -67,6 +68,7 @@ Route::prefix('v1')->group(function () {
 
             // Module Projets, Tâches et Feuilles de temps
             Route::get('/projects', [ProjectTimesheetController::class, 'projects']);
+            Route::get('/timesheets', [ProjectTimesheetController::class, 'index']);
             Route::get('/timesheets/my-entries', [ProjectTimesheetController::class, 'myTimeEntries']);
             Route::post('/timesheets/log', [ProjectTimesheetController::class, 'storeTimeEntry']);
             Route::post('/timesheets/{id}/review', [ProjectTimesheetController::class, 'reviewTimeEntry']);

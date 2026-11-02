@@ -142,5 +142,26 @@ class ProjectTimesheetTest extends TestCase
             ->assertJsonPath('data.status', 'REJECTED')
             ->assertJsonPath('data.rejection_reason', 'Veuillez préciser la tâche associée.');
     }
+
+    public function test_can_list_timesheets_for_organization(): void
+    {
+        TimeEntry::create([
+            'id' => (string) Str::uuid(),
+            'organization_id' => $this->org->id,
+            'employee_id' => $this->employee->id,
+            'project_id' => $this->project->id,
+            'date' => Carbon::now()->toDateString(),
+            'hours' => 7.0,
+            'description' => 'Développement NTEMO ONE',
+            'status' => 'SUBMITTED',
+        ]);
+
+        $response = $this->actingAs($this->managerUser, 'sanctum')
+            ->getJson('/api/v1/timesheets');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure(['data', 'current_page', 'total']);
+        $this->assertCount(1, $response->json('data'));
+    }
 }
 
