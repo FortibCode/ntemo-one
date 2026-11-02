@@ -41,3 +41,4 @@ class QrSession extends Model
         return now()->isAfter($this->expires_at);
     }
 }
+

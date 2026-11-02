@@ -42,3 +42,4 @@ class AttendanceDevice extends Model
         return $this->hasMany(QrSession::class, 'device_id');
     }
 }
+

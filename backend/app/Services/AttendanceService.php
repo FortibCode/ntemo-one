@@ -180,3 +180,4 @@ class AttendanceService
         $dayRecord->save();
     }
 }
+

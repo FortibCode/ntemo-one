@@ -52,3 +52,4 @@ class AttendanceEvent extends Model
         return $this->belongsTo(QrSession::class, 'qr_session_id');
     }
 }
+
