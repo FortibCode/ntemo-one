@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\BadgeController;
 use App\Http\Controllers\Api\V1\LeaveController;
 use App\Http\Controllers\Api\V1\DocumentEngineController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\ProjectTimesheetController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -58,6 +59,12 @@ Route::prefix('v1')->group(function () {
             Route::get('/notifications', [NotificationController::class, 'index']);
             Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
             Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+
+            // Module Projets, Tâches et Feuilles de temps
+            Route::get('/projects', [ProjectTimesheetController::class, 'projects']);
+            Route::get('/timesheets/my-entries', [ProjectTimesheetController::class, 'myTimeEntries']);
+            Route::post('/timesheets/log', [ProjectTimesheetController::class, 'storeTimeEntry']);
+            Route::post('/timesheets/{id}/review', [ProjectTimesheetController::class, 'reviewTimeEntry']);
         });
     });
 });
