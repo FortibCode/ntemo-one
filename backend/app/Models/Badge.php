@@ -63,3 +63,4 @@ class Badge extends Model
         return $this->status === 'ACTIVE' && (!$this->expires_at || now()->toDateString() <= $this->expires_at->toDateString());
     }
 }
+

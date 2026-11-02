@@ -39,3 +39,4 @@ class BadgeTemplate extends Model
         return $this->hasMany(Badge::class);
     }
 }
+

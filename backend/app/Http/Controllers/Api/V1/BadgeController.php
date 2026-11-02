@@ -142,3 +142,4 @@ class BadgeController extends Controller
         return response()->json($result, $result['is_valid'] ? Response::HTTP_OK : Response::HTTP_UNPROCESSABLE_ENTITY);
     }
 }
+

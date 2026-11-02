@@ -144,3 +144,4 @@ class BadgeManagementTest extends TestCase
             ->assertJsonPath('is_valid', false);
     }
 }
+

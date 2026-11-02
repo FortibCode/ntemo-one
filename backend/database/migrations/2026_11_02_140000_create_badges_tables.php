@@ -81,3 +81,4 @@ return new class extends Migration
         Schema::dropIfExists('badge_templates');
     }
 };
+

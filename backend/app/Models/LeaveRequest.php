@@ -53,3 +53,4 @@ class LeaveRequest extends Model
         return $this->hasMany(LeaveAttachment::class);
     }
 }
+

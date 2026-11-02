@@ -38,3 +38,4 @@ class LeaveType extends Model
         return $this->belongsTo(Organization::class);
     }
 }
+

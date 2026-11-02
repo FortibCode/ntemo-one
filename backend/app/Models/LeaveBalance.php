@@ -38,3 +38,4 @@ class LeaveBalance extends Model
         return $this->belongsTo(LeaveType::class);
     }
 }
+

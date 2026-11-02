@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\EmployeeController;
 use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\BadgeController;
 use App\Http\Controllers\Api\V1\LeaveController;
+use App\Http\Controllers\Api\V1\DocumentEngineController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -46,6 +47,11 @@ Route::prefix('v1')->group(function () {
             Route::post('/leaves/requests', [LeaveController::class, 'store']);
             Route::post('/leaves/requests/{id}/review-n1', [LeaveController::class, 'reviewByManager']);
             Route::post('/leaves/requests/{id}/review-hr', [LeaveController::class, 'reviewByHr']);
+
+            // Module Moteur Documentaire Versionné
+            Route::get('/documents/templates', [DocumentEngineController::class, 'templates']);
+            Route::post('/documents/generate', [DocumentEngineController::class, 'generate']);
+            Route::get('/documents/download/{id}', [DocumentEngineController::class, 'download']);
         });
     });
 });
