@@ -27,3 +27,4 @@ class NotificationDelivery extends Model
         return $this->belongsTo(AppNotification::class, 'notification_id');
     }
 }
+

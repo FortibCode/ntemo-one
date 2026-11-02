@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\LeaveController;
 use App\Http\Controllers\Api\V1\DocumentEngineController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProjectTimesheetController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,9 @@ Route::prefix('v1')->group(function () {
 
         // Routes restreintes par organisation active
         Route::middleware(EnsureBelongsToOrganization::class)->group(function () {
+            // Module Tableau de Bord & Indicateurs
+            Route::get('/dashboard/kpis', [DashboardController::class, 'kpis']);
+
             // Module Employés
             Route::apiResource('employees', EmployeeController::class);
 

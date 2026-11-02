@@ -143,3 +143,4 @@ class ProjectTimesheetTest extends TestCase
             ->assertJsonPath('data.rejection_reason', 'Veuillez préciser la tâche associée.');
     }
 }
+

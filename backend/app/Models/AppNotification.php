@@ -50,3 +50,4 @@ class AppNotification extends Model
         }
     }
 }
+

@@ -71,3 +71,4 @@ class NotificationService
             ->update(['read_at' => now()]);
     }
 }
+

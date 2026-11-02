@@ -103,3 +103,4 @@ class NotificationManagementTest extends TestCase
         $this->assertEquals(0, $unreadRemaining);
     }
 }
+
