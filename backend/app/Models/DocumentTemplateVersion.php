@@ -39,3 +39,4 @@ class DocumentTemplateVersion extends Model
         return $this->hasMany(DocumentGeneration::class);
     }
 }
+

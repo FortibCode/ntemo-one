@@ -47,3 +47,4 @@ class DocumentTemplate extends Model
         return $this->hasOne(DocumentTemplateVersion::class)->where('is_current', true);
     }
 }
+

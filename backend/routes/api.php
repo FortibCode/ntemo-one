@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\BadgeController;
 use App\Http\Controllers\Api\V1\LeaveController;
 use App\Http\Controllers\Api\V1\DocumentEngineController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -52,6 +53,11 @@ Route::prefix('v1')->group(function () {
             Route::get('/documents/templates', [DocumentEngineController::class, 'templates']);
             Route::post('/documents/generate', [DocumentEngineController::class, 'generate']);
             Route::get('/documents/download/{id}', [DocumentEngineController::class, 'download']);
+
+            // Module Notifications & Alertes
+            Route::get('/notifications', [NotificationController::class, 'index']);
+            Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+            Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
         });
     });
 });

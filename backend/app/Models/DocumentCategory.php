@@ -33,3 +33,4 @@ class DocumentCategory extends Model
         return $this->hasMany(DocumentTemplate::class);
     }
 }
+
