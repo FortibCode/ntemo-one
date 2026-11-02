@@ -25,6 +25,12 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
     _attendanceService = AttendanceService(apiClient: widget.apiClient);
   }
 
+  @override
+  void dispose() {
+    _manualTokenController.dispose();
+    super.dispose();
+  }
+
   Future<void> _submitPunch(String rawToken) async {
     if (rawToken.trim().isEmpty) return;
 

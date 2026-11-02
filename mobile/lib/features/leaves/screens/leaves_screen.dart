@@ -105,28 +105,37 @@ class _LeavesScreenState extends State<LeavesScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () {
+                reasonController.dispose();
+                Navigator.pop(ctx);
+              },
               child: const Text('Annuler'),
             ),
             FilledButton(
               onPressed: () async {
-                if (reasonController.text.trim().isEmpty) return;
+                final reason = reasonController.text.trim();
+                reasonController.dispose();
+                if (reason.isEmpty) return;
                 Navigator.pop(ctx);
                 try {
                   await _leavesService.submitLeaveRequest(
                     leaveTypeId: selectedTypeId,
                     startDate: startDate.toIso8601String().substring(0, 10),
                     endDate: endDate.toIso8601String().substring(0, 10),
-                    reason: reasonController.text.trim(),
+                    reason: reason,
                   );
-                  _loadData();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Demande de congé déposée avec succès !')),
-                  );
+                  if (mounted) _loadData();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Demande de congé déposée avec succès !')),
+                    );
+                  }
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.toString())),
-                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(e.toString())),
+                    );
+                  }
                 }
               },
               child: const Text('Soumettre'),
