@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/api/api_client.dart';
-import '../services/badge_service.dart';
+import 'package:ntemo_one_mobile/core/api/api_client.dart';
+import 'package:ntemo_one_mobile/features/badge/services/badge_service.dart';
 
 class VirtualBadgeScreen extends StatefulWidget {
   final ApiClient apiClient;

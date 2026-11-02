@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/api/api_client.dart';
-import '../services/profile_service.dart';
+import 'package:ntemo_one_mobile/core/api/api_client.dart';
+import 'package:ntemo_one_mobile/features/profile/services/profile_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final ApiClient apiClient;

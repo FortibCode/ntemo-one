@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/api/api_client.dart';
-import '../services/attendance_service.dart';
+import 'package:ntemo_one_mobile/core/api/api_client.dart';
+import 'package:ntemo_one_mobile/features/attendance/services/attendance_service.dart';
 
 class AttendanceScanScreen extends StatefulWidget {
   final ApiClient apiClient;

@@ -1,4 +1,4 @@
-import '../../core/api/api_client.dart';
+import 'package:ntemo_one_mobile/core/api/api_client.dart';
 
 class VirtualBadge {
   final String id;

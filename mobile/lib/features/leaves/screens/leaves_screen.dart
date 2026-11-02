@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/api/api_client.dart';
-import '../services/leaves_service.dart';
+import 'package:ntemo_one_mobile/core/api/api_client.dart';
+import 'package:ntemo_one_mobile/features/leaves/services/leaves_service.dart';
 
 class LeavesScreen extends StatefulWidget {
   final ApiClient apiClient;

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'core/api/api_client.dart';
-import 'core/constants/app_constants.dart';
-import 'features/attendance/screens/attendance_scan_screen.dart';
-import 'features/badge/screens/virtual_badge_screen.dart';
-import 'features/leaves/screens/leaves_screen.dart';
-import 'features/profile/screens/profile_screen.dart';
+import 'package:ntemo_one_mobile/core/api/api_client.dart';
+import 'package:ntemo_one_mobile/core/constants/app_constants.dart';
+import 'package:ntemo_one_mobile/features/attendance/screens/attendance_scan_screen.dart';
+import 'package:ntemo_one_mobile/features/badge/screens/virtual_badge_screen.dart';
+import 'package:ntemo_one_mobile/features/leaves/screens/leaves_screen.dart';
+import 'package:ntemo_one_mobile/features/profile/screens/profile_screen.dart';
 
 void main() {
   runApp(const NtemoOneApp());
