@@ -193,7 +193,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.emerald.shade50,
+                color: Colors.green.shade50,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.greenAccent.shade700),
               ),
