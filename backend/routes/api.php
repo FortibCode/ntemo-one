@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\DocumentEngineController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProjectTimesheetController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\AiAssistantController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -69,6 +70,12 @@ Route::prefix('v1')->group(function () {
             Route::get('/timesheets/my-entries', [ProjectTimesheetController::class, 'myTimeEntries']);
             Route::post('/timesheets/log', [ProjectTimesheetController::class, 'storeTimeEntry']);
             Route::post('/timesheets/{id}/review', [ProjectTimesheetController::class, 'reviewTimeEntry']);
+
+            // Module Assistant IA pour les Tâches Documentaires Autorêmes
+            Route::get('/ai/conversations', [AiAssistantController::class, 'conversations']);
+            Route::post('/ai/conversations', [AiAssistantController::class, 'createConversation']);
+            Route::post('/ai/conversations/{id}/messages', [AiAssistantController::class, 'sendMessage']);
+            Route::post('/ai/tasks/draft', [AiAssistantController::class, 'generateDraft']);
         });
     });
 });

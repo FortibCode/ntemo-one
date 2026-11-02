@@ -9,3 +9,4 @@ class AppConstants {
   // Attendance constants
   static const int qrTtlSeconds = 15;
 }
+

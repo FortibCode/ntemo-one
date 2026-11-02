@@ -58,3 +58,4 @@ class BadgeService {
     throw ApiException("Aucun badge actif disponible.");
   }
 }
+
