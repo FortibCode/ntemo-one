@@ -85,3 +85,4 @@ class AiAssistantTest extends TestCase
         ]);
     }
 }
+

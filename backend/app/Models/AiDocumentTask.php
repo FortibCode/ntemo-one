@@ -29,3 +29,4 @@ class AiDocumentTask extends Model
         return $this->belongsTo(User::class);
     }
 }
+

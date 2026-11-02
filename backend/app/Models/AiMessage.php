@@ -28,3 +28,4 @@ class AiMessage extends Model
         return $this->belongsTo(AiConversation::class, 'ai_conversation_id');
     }
 }
+

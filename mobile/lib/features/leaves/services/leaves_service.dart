@@ -106,3 +106,4 @@ class LeavesService {
     throw ApiException("Échec du dépôt de la demande.");
   }
 }
+

@@ -28,3 +28,4 @@ class AiConversation extends Model
         return $this->hasMany(AiMessage::class)->orderBy('created_at', 'asc');
     }
 }
+

@@ -87,3 +87,4 @@ class AiAssistantService
         return "En tant qu'assistant documentaire NTEMO ONE, j'ai analysé votre demande (« {$prompt} »). Les modèles et gabarits administratifs de l'organisation restent à votre disposition pour formaliser et exporter ce document en PDF ou DOCX.";
     }
 }
+

@@ -98,3 +98,4 @@ class AiAssistantController extends Controller
         ], Response::HTTP_CREATED);
     }
 }
+

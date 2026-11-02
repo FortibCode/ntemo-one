@@ -58,3 +58,4 @@ class ProfileService {
     throw ApiException("Impossible de charger les données du profil.");
   }
 }
+
