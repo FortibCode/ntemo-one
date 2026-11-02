@@ -45,18 +45,15 @@ export default function LoginPage() {
         {/* LEFT SECTION (Pure Clean White Canvas with ONLY the Centered NTÊMO Logo) */}
         <div className="relative bg-white text-slate-800 flex flex-col items-center justify-center p-8 sm:p-12 lg:w-[52%] overflow-hidden z-20">
           
-          {/* Ambient soft glow behind logo */}
-          <div className="absolute w-72 h-72 rounded-full bg-gradient-to-tr from-[#e0f2fe] via-[#f0f9ff] to-[#e0f2fe]/40 blur-2xl -z-10" />
-
-          {/* Centered Large Official NTÊMO Logo */}
-          <div className="relative flex flex-col items-center justify-center">
+          {/* Centered Large Crisp Official NTÊMO Logo (No box-shadow, no blur, high fidelity) */}
+          <div className="relative flex items-center justify-center">
             <Image
-              src="/logo-transparent.png"
+              src="/logo-hd.png"
               alt="Logo NTÊMO"
-              width={260}
-              height={260}
+              width={280}
+              height={280}
               priority
-              className="object-contain drop-shadow-sm transition-transform duration-300 hover:scale-105"
+              className="object-contain select-none"
             />
           </div>
 
