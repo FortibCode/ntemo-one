@@ -46,18 +46,8 @@ export default function LoginPage() {
         {/* LEFT SECTION (Pure White Canvas with NTÊMO Branding & December 2026 Illustration) */}
         <div className="relative bg-white text-slate-800 flex flex-col justify-between p-8 sm:p-12 lg:w-[52%] overflow-hidden z-20">
           
-          {/* Top Brand Header with NTÊMO Logo */}
-          <div className="relative z-10 flex items-center space-x-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-white p-1.5 shadow-sm border border-slate-200/80 flex items-center justify-center">
-              <Image
-                src="/logo-transparent.png"
-                alt="Logo NTÊMO"
-                width={42}
-                height={42}
-                priority
-                className="object-contain"
-              />
-            </div>
+          {/* Top Brand Header */}
+          <div className="relative z-10 flex items-center justify-between">
             <div>
               <span className="block text-sm font-black tracking-wider text-[#0c4884] uppercase font-sans">
                 NTÊMO CONSULTING
@@ -68,101 +58,36 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Center Illustration : Festive Corporate December 2026 (Cadeau Numérique) */}
-          <div className="relative my-8 py-4 flex flex-col items-center justify-center z-10">
-            {/* Soft decorative background circles */}
-            <div className="absolute w-64 h-64 rounded-full bg-gradient-to-tr from-[#e0f2fe] to-[#f0fdf4] -z-10 blur-sm opacity-80" />
-            <div className="absolute -top-4 right-12 w-16 h-16 rounded-full bg-[#bae6fd]/40 blur-xs -z-10" />
-            <div className="absolute bottom-6 left-10 w-20 h-20 rounded-full bg-[#e2e8f0]/60 blur-xs -z-10" />
+          {/* Center Brand Hero: Prominent Official NTÊMO Logo */}
+          <div className="relative my-auto py-10 flex flex-col items-center justify-center z-10">
+            {/* Soft decorative aura matching logo gradient */}
+            <div className="absolute w-72 h-72 rounded-full bg-gradient-to-tr from-[#e0f2fe] via-[#f0f9ff] to-[#e0f2fe]/40 blur-2xl -z-10" />
+            <div className="absolute -top-6 right-8 w-20 h-20 rounded-full bg-[#bae6fd]/30 blur-xl -z-10" />
 
-            {/* High-fidelity Vector Art */}
-            <svg
-              className="w-56 h-56 sm:w-64 sm:h-64 drop-shadow-md"
-              viewBox="0 0 320 320"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {/* Ground & Snow layer */}
-              <ellipse cx="160" cy="275" rx="110" ry="22" fill="#e2e8f0" />
-              <ellipse cx="160" cy="273" rx="95" ry="16" fill="#f1f5f9" />
+            <div className="relative flex flex-col items-center justify-center">
+              <div className="p-4 rounded-3xl bg-white/60 backdrop-blur-sm border border-slate-100 shadow-sm transition-transform duration-300 hover:scale-105">
+                <Image
+                  src="/logo-transparent.png"
+                  alt="Logo NTÊMO Consulting"
+                  width={220}
+                  height={220}
+                  priority
+                  className="object-contain drop-shadow-md"
+                />
+              </div>
 
-              {/* Tree Trunk */}
-              <rect x="150" y="225" width="20" height="42" rx="4" fill="#334155" />
-
-              {/* Christmas / Innovation Tree Layers in NTÊMO Colors */}
-              {/* Bottom Tier */}
-              <path
-                d="M80 235 C90 205, 120 195, 130 190 L190 190 C200 195, 230 205, 240 235 C220 248, 190 245, 160 245 C130 245, 100 248, 80 235 Z"
-                fill="#0f766e"
-              />
-              <path
-                d="M86 230 C120 242, 200 242, 234 230 C220 238, 180 241, 160 241 C140 241, 100 238, 86 230 Z"
-                fill="#f8fafc"
-                opacity="0.85"
-              />
-
-              {/* Middle Tier */}
-              <path
-                d="M100 190 C110 165, 130 155, 140 150 L180 150 C190 155, 210 165, 220 190 C205 200, 180 198, 160 198 C140 198, 115 200, 100 190 Z"
-                fill="#0d9488"
-              />
-              <path
-                d="M106 186 C135 195, 185 195, 214 186 C200 192, 175 194, 160 194 C145 194, 120 192, 106 186 Z"
-                fill="#f8fafc"
-                opacity="0.85"
-              />
-
-              {/* Top Tier */}
-              <path
-                d="M120 150 C130 125, 145 110, 160 95 C175 110, 190 125, 200 150 C185 158, 170 157, 160 157 C150 157, 135 158, 120 150 Z"
-                fill="#14b8a6"
-              />
-              <path
-                d="M126 146 C145 153, 175 153, 194 146 C180 151, 170 152, 160 152 C150 152, 140 151, 126 146 Z"
-                fill="#f8fafc"
-                opacity="0.85"
-              />
-
-              {/* Tree Peak Glowing Star */}
-              <polygon
-                points="160,82 164,92 174,93 166,100 168,110 160,104 152,110 154,100 146,93 156,92"
-                fill="#fbbf24"
-              />
-
-              {/* Baubles / Digital Ornaments in NTÊMO Blue & Rose Accent */}
-              <circle cx="130" cy="215" r="5" fill="#f43f5e" />
-              <circle cx="160" cy="225" r="5" fill="#0284c7" />
-              <circle cx="190" cy="215" r="5" fill="#fbbf24" />
-              <circle cx="145" cy="175" r="4.5" fill="#38bdf8" />
-              <circle cx="175" cy="175" r="4.5" fill="#f43f5e" />
-              <circle cx="160" cy="130" r="4" fill="#fbbf24" />
-
-              {/* Characters / Holiday Figures */}
-              {/* Little girl decorating */}
-              <circle cx="120" cy="220" r="6" fill="#3b0764" />
-              <path d="M116 226 L124 226 L127 248 L113 248 Z" fill="#7c3aed" />
-              <rect x="115" y="248" width="3" height="12" fill="#1e1b4b" />
-              <rect x="122" y="248" width="3" height="12" fill="#1e1b4b" />
-
-              {/* Gift Box with ribbon */}
-              <rect x="220" y="240" width="24" height="22" rx="3" fill="#0284c7" />
-              <rect x="230" y="240" width="4" height="22" fill="#fbbf24" />
-              <rect x="220" y="249" width="24" height="4" fill="#fbbf24" />
-
-              {/* Walking Character on bottom left */}
-              <circle cx="56" cy="242" r="5" fill="#0f172a" />
-              <path d="M52 247 L60 247 L64 268 L48 268 Z" fill="#1e293b" />
-              <line x1="53" y1="268" x2="50" y2="282" stroke="#0f172a" strokeWidth="3" strokeLinecap="round" />
-              <line x1="60" y1="268" x2="64" y2="282" stroke="#0f172a" strokeWidth="3" strokeLinecap="round" />
-
-              {/* Decorative small tree next to character */}
-              <path d="M68 280 C68 260 84 250 84 250 C84 250 100 260 100 280 Z" fill="#0f766e" />
-            </svg>
-
-            <div className="mt-3 text-center">
-              <span className="inline-block px-3 py-1 rounded-full text-[11px] font-extrabold bg-[#0284c7]/10 text-[#0284c7] border border-[#0284c7]/20 uppercase tracking-wider">
-                Cadeau Numérique Décembre 2026
-              </span>
+              <div className="mt-6 text-center">
+                <h2 className="text-2xl font-black tracking-tight text-[#0c4884]">
+                  NTEMO ONE
+                </h2>
+                <p className="text-xs font-semibold text-[#0ea5e9] tracking-wider uppercase mt-1">
+                  Plateforme Intégrée RH & Administration
+                </p>
+                <div className="mt-3.5 inline-flex items-center space-x-1.5 px-3.5 py-1 rounded-full text-[11px] font-bold bg-[#0284c7]/10 text-[#0284c7] border border-[#0284c7]/20 uppercase tracking-wide">
+                  <span>✦</span>
+                  <span>Cadeau Numérique Décembre 2026</span>
+                </div>
+              </div>
             </div>
           </div>
 
