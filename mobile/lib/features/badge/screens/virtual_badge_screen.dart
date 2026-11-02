@@ -32,17 +32,21 @@ class _VirtualBadgeScreenState extends State<VirtualBadgeScreen> {
 
     try {
       final badge = await _badgeService.getMyVirtualBadge();
+      if (!mounted) return;
       setState(() {
         _badge = badge;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

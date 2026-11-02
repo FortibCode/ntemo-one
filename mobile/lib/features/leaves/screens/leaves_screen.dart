@@ -34,18 +34,22 @@ class _LeavesScreenState extends State<LeavesScreen> {
     try {
       final types = await _leavesService.getLeaveTypes();
       final requests = await _leavesService.getMyLeaveRequests();
+      if (!mounted) return;
       setState(() {
         _types = types;
         _requests = requests;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -105,16 +109,12 @@ class _LeavesScreenState extends State<LeavesScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                reasonController.dispose();
-                Navigator.pop(ctx);
-              },
+              onPressed: () => Navigator.pop(ctx),
               child: const Text('Annuler'),
             ),
             FilledButton(
               onPressed: () async {
                 final reason = reasonController.text.trim();
-                reasonController.dispose();
                 if (reason.isEmpty) return;
                 Navigator.pop(ctx);
                 try {
@@ -143,7 +143,9 @@ class _LeavesScreenState extends State<LeavesScreen> {
           ],
         ),
       ),
-    );
+    ).then((_) {
+      reasonController.dispose();
+    });
   }
 
   Color _getStatusColor(String status) {

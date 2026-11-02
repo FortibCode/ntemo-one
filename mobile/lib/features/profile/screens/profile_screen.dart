@@ -32,17 +32,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final profile = await _profileService.getMyProfile();
+      if (!mounted) return;
       setState(() {
         _profile = profile;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

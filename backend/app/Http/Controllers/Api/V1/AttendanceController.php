@@ -110,5 +110,99 @@ class AttendanceController extends Controller
             'data' => $records,
         ]);
     }
+
+    /**
+     * Liste des demandes de régularisation (Admin / RH / Managers).
+     */
+    public function corrections(Request $request): JsonResponse
+    {
+        $query = \App\Models\AttendanceCorrection::where('organization_id', $request->user()->organization_id)
+            ->with(['employee.department', 'reviewer'])
+            ->latest('created_at');
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        return response()->json($query->paginate(25));
+    }
+
+    /**
+     * Demande de régularisation de présence par un collaborateur.
+     */
+    public function requestCorrection(Request $request): JsonResponse
+    {
+        $request->validate([
+            'date' => ['required', 'date', 'before_or_equal:today'],
+            'requested_event_type' => ['required', 'in:IN,OUT'],
+            'requested_time' => ['required', 'date_format:H:i'],
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        $employee = $request->user()->employee;
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucun dossier collaborateur associé.',
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        $correction = \App\Models\AttendanceCorrection::create([
+            'organization_id' => $request->user()->organization_id,
+            'employee_id' => $employee->id,
+            'date' => $request->date,
+            'requested_event_type' => $request->requested_event_type,
+            'requested_time' => $request->requested_time,
+            'reason' => $request->reason,
+            'status' => 'PENDING',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Demande de régularisation enregistrée avec succès.',
+            'data' => $correction,
+        ], Response::HTTP_CREATED);
+    }
+
+    /**
+     * Examen d'une demande de régularisation (Approbation / Rejet).
+     */
+    public function reviewCorrection(Request $request, string $id): JsonResponse
+    {
+        $request->validate([
+            'action' => ['required', 'in:APPROVE,REJECT'],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $correction = \App\Models\AttendanceCorrection::where('id', $id)
+            ->where('organization_id', $request->user()->organization_id)
+            ->firstOrFail();
+
+        if ($request->action === 'APPROVE') {
+            $correction->update([
+                'status' => 'APPROVED_RH',
+                'reviewed_by' => $request->user()->id,
+                'reviewed_at' => Carbon::now(),
+            ]);
+
+            $message = 'Demande de régularisation approuvée avec succès.';
+        } else {
+            $request->validate(['reason' => ['required', 'string']]);
+            $correction->update([
+                'status' => 'REJECTED',
+                'reviewed_by' => $request->user()->id,
+                'rejection_reason' => $request->reason,
+                'reviewed_at' => Carbon::now(),
+            ]);
+
+            $message = 'Demande de régularisation rejetée.';
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => $correction,
+        ]);
+    }
 }
 

@@ -41,6 +41,9 @@ Route::prefix('v1')->group(function () {
             Route::post('/attendance/qr-session', [AttendanceController::class, 'generateQrSession']);
             Route::post('/attendance/punch', [AttendanceController::class, 'punch']);
             Route::get('/attendance/my-records', [AttendanceController::class, 'myAttendances']);
+            Route::get('/attendance/corrections', [AttendanceController::class, 'corrections']);
+            Route::post('/attendance/corrections', [AttendanceController::class, 'requestCorrection']);
+            Route::post('/attendance/corrections/{id}/review', [AttendanceController::class, 'reviewCorrection']);
 
             // Module Badges Virtuels & Contrôle
             Route::get('/badges', [BadgeController::class, 'index']);

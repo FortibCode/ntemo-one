@@ -47,18 +47,22 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
         deviceMeta: 'Flutter Mobile Scanner (Android/iOS)',
       );
 
+      if (!mounted) return;
       setState(() {
         _successMessage = "Pointage validé avec succès (${_punchType == 'IN' ? 'Entrée' : 'Sortie'}) à ${DateTime.now().toIso8601String().substring(11, 16)} !";
         _manualTokenController.clear();
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString();
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

@@ -147,4 +147,38 @@ class DynamicQrAttendanceTest extends TestCase
 
         Carbon::setTestNow(); // Reset
     }
+
+    public function test_attendance_correction_workflow(): void
+    {
+        // 1. Demande de régularisation par l'employé
+        $response = $this->actingAs($this->userEmployee, 'sanctum')
+            ->postJson('/api/v1/attendance/corrections', [
+                'date' => Carbon::now()->toDateString(),
+                'requested_event_type' => 'IN',
+                'requested_time' => '08:30',
+                'reason' => 'Incident technique sur la borne d\'accueil.',
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status', 'PENDING');
+
+        $correctionId = $response->json('data.id');
+
+        // 2. Listing des régularisations pour les RH
+        $listResponse = $this->actingAs($this->userEmployee, 'sanctum')
+            ->getJson('/api/v1/attendance/corrections');
+
+        $listResponse->assertStatus(200)
+            ->assertJsonStructure(['data', 'current_page', 'total']);
+
+        // 3. Approbation par le responsable
+        $reviewResponse = $this->actingAs($this->userEmployee, 'sanctum')
+            ->postJson("/api/v1/attendance/corrections/{$correctionId}/review", [
+                'action' => 'APPROVE',
+            ]);
+
+        $reviewResponse->assertStatus(200)
+            ->assertJsonPath('data.status', 'APPROVED_RH');
+    }
 }
