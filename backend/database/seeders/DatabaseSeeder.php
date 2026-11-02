@@ -6,6 +6,9 @@ use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\Department;
+use App\Models\Position;
+use App\Models\Employee;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -17,21 +20,23 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // 1. Création de l'Organisation Principale
-        $organization = Organization::create([
-            'id' => (string) Str::uuid(),
-            'name' => 'NTEMO Consulting',
-            'slug' => 'ntemo-consulting',
-            'registration_number' => 'CG-BZV-01-2026-B12-0042',
-            'tax_number' => 'M2026001234F',
-            'email' => 'contact@ntemoconsulting.com',
-            'phone' => '+242 06 000 0000',
-            'country' => 'Congo',
-            'city' => 'Brazzaville',
-            'timezone' => 'Africa/Brazzaville',
-            'currency' => 'XAF',
-            'is_active' => true,
-        ]);
+        // 1. Création ou récupération de l'Organisation Principale
+        $organization = Organization::firstOrCreate(
+            ['slug' => 'ntemo-consulting'],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'NTEMO Consulting',
+                'registration_number' => 'CG-BZV-01-2026-B12-0042',
+                'tax_number' => 'M2026001234F',
+                'email' => 'contact@ntemoconsulting.com',
+                'phone' => '+242 06 000 0000',
+                'country' => 'Congo',
+                'city' => 'Brazzaville',
+                'timezone' => 'Africa/Brazzaville',
+                'currency' => 'XAF',
+                'is_active' => true,
+            ]
+        );
 
         // 2. Création des Permissions Fondamentales
         $permissionsList = [
@@ -50,6 +55,7 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Gérer les contrats de travail', 'slug' => 'contracts.manage', 'module' => 'contracts'],
             ['name' => 'Voir les documents confidentiels', 'slug' => 'documents.read_confidential', 'module' => 'documents'],
             ['name' => 'Téléverser des documents RH', 'slug' => 'documents.upload', 'module' => 'documents'],
+            ['name' => 'Générer des documents', 'slug' => 'documents.generate', 'module' => 'documents'],
 
             // Présences & Pointage
             ['name' => 'Pointage personnel QR', 'slug' => 'attendance.point_self', 'module' => 'attendance'],
@@ -59,94 +65,228 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Demander régularisation présence', 'slug' => 'attendance.request_correction', 'module' => 'attendance'],
             ['name' => 'Approuver régularisation présence', 'slug' => 'attendance.approve_correction', 'module' => 'attendance'],
 
+            // Badges
+            ['name' => 'Gérer et révoquer les badges', 'slug' => 'badges.generate_revoke', 'module' => 'badges'],
+            ['name' => 'Voir badge personnel', 'slug' => 'badges.view_self', 'module' => 'badges'],
+
             // Congés
             ['name' => 'Demander un congé', 'slug' => 'leaves.request_self', 'module' => 'leaves'],
             ['name' => 'Approbation N+1 congés', 'slug' => 'leaves.approve_n1', 'module' => 'leaves'],
             ['name' => 'Validation finale RH congés', 'slug' => 'leaves.approve_final_rh', 'module' => 'leaves'],
 
-            // Audit
+            // Projets & Feuilles de temps
+            ['name' => 'Déclarer temps', 'slug' => 'timesheets.log_self', 'module' => 'timesheets'],
+            ['name' => 'Valider feuilles de temps', 'slug' => 'timesheets.approve', 'module' => 'timesheets'],
+            ['name' => 'Gérer projets', 'slug' => 'projects.manage', 'module' => 'projects'],
+
+            // Audit & IA
             ['name' => 'Consulter les journaux d\'audit', 'slug' => 'audit.view', 'module' => 'audit'],
+            ['name' => 'Utiliser assistant IA', 'slug' => 'ai.use', 'module' => 'ai'],
         ];
 
         $permissionModels = [];
         foreach ($permissionsList as $permData) {
-            $permissionModels[$permData['slug']] = Permission::create([
-                'id' => (string) Str::uuid(),
-                'name' => $permData['name'],
-                'slug' => $permData['slug'],
-                'module' => $permData['module'],
-            ]);
+            $permissionModels[$permData['slug']] = Permission::firstOrCreate(
+                ['slug' => $permData['slug']],
+                [
+                    'id' => (string) Str::uuid(),
+                    'name' => $permData['name'],
+                    'module' => $permData['module'],
+                ]
+            );
         }
 
-        // 3. Création des Rôles Spécifiques
-        $roleSuperAdmin = Role::create([
-            'id' => (string) Str::uuid(),
-            'name' => 'Super Administrateur',
-            'slug' => 'super_admin',
-            'description' => 'Administration système globale',
-            'is_system' => true,
-        ]);
+        // 3. Rôles Définis par le Cahier des Charges (Section 4)
+        $roleSuperAdmin = Role::firstOrCreate(
+            ['slug' => 'super_admin'],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'Super Administrateur',
+                'description' => 'Administration système globale, sécurité et audit',
+                'is_system' => true,
+            ]
+        );
 
-        $roleOrgAdmin = Role::create([
-            'id' => (string) Str::uuid(),
-            'organization_id' => $organization->id,
-            'name' => 'Directeur RH / Admin Organisation',
-            'slug' => 'org_admin',
-            'description' => 'Gestion globale de l\'organisation et des RH',
-            'is_system' => false,
-        ]);
+        $roleDirection = Role::firstOrCreate(
+            ['slug' => 'direction_generale', 'organization_id' => $organization->id],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'Direction Générale',
+                'description' => 'Supervision globale, validation contrats et rapports stratégiques',
+                'is_system' => false,
+            ]
+        );
 
-        $roleManager = Role::create([
-            'id' => (string) Str::uuid(),
-            'organization_id' => $organization->id,
-            'name' => 'Responsable Hiérarchique N+1',
-            'slug' => 'department_manager',
-            'description' => 'Supervision de l\'équipe, approbations N+1',
-            'is_system' => false,
-        ]);
+        $roleRH = Role::firstOrCreate(
+            ['slug' => 'rh_administration', 'organization_id' => $organization->id],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'RH / Administration',
+                'description' => 'Gestion des fiches employés, contrats, badges, congés et documents',
+                'is_system' => false,
+            ]
+        );
 
-        $roleEmployee = Role::create([
-            'id' => (string) Str::uuid(),
-            'organization_id' => $organization->id,
-            'name' => 'Employé Collaborateur',
-            'slug' => 'employee',
-            'description' => 'Accès espace personnel, pointage, congés',
-            'is_system' => false,
-        ]);
+        $roleManager = Role::firstOrCreate(
+            ['slug' => 'project_manager', 'organization_id' => $organization->id],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'Responsable de Projet',
+                'description' => 'Suivi de présence de l\'équipe, validation feuilles de temps et congés N+1',
+                'is_system' => false,
+            ]
+        );
+
+        $roleEmployee = Role::firstOrCreate(
+            ['slug' => 'employee', 'organization_id' => $organization->id],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'Collaborateur',
+                'description' => 'Badge virtuel, pointage QR, demandes de congé et temps de travail',
+                'is_system' => false,
+            ]
+        );
 
         // 4. Attribution des Permissions aux Rôles
         $allPermissions = Permission::all();
         $roleSuperAdmin->permissions()->sync($allPermissions->pluck('id'));
-        $roleOrgAdmin->permissions()->sync($allPermissions->pluck('id'));
+        $roleDirection->permissions()->sync($allPermissions->pluck('id'));
 
-        $managerPerms = collect([
-            $permissionModels['employees.view_self']->id,
-            $permissionModels['employees.view_team']->id,
-            $permissionModels['attendance.point_self']->id,
-            $permissionModels['attendance.view_team']->id,
-            $permissionModels['attendance.approve_correction']->id,
-            $permissionModels['leaves.request_self']->id,
-            $permissionModels['leaves.approve_n1']->id,
-        ]);
-        $roleManager->permissions()->sync($managerPerms);
+        $rhPerms = $allPermissions->filter(fn($p) => in_array($p->module, ['employees', 'structure', 'contracts', 'documents', 'attendance', 'badges', 'leaves', 'ai']));
+        $roleRH->permissions()->sync($rhPerms->pluck('id'));
 
-        $employeePerms = collect([
-            $permissionModels['employees.view_self']->id,
-            $permissionModels['attendance.point_self']->id,
-            $permissionModels['attendance.request_correction']->id,
-            $permissionModels['leaves.request_self']->id,
-        ]);
-        $roleEmployee->permissions()->sync($employeePerms);
+        $managerPerms = $allPermissions->filter(fn($p) => in_array($p->slug, [
+            'employees.view_self', 'employees.view_team',
+            'attendance.point_self', 'attendance.view_team', 'attendance.approve_correction',
+            'leaves.request_self', 'leaves.approve_n1',
+            'timesheets.log_self', 'timesheets.approve', 'projects.manage',
+            'badges.view_self', 'ai.use',
+        ]));
+        $roleManager->permissions()->sync($managerPerms->pluck('id'));
 
-        // 5. Création de l'Administrateur Initial
-        $adminUser = User::create([
-            'id' => (string) Str::uuid(),
-            'organization_id' => $organization->id,
-            'name' => 'Administrateur NTEMO',
-            'email' => 'admin@ntemo.local',
-            'password' => Hash::make('NtemoAdmin2026!'),
-            'is_active' => true,
-        ]);
-        $adminUser->roles()->attach([$roleSuperAdmin->id, $roleOrgAdmin->id]);
+        $empPerms = $allPermissions->filter(fn($p) => in_array($p->slug, [
+            'employees.view_self',
+            'attendance.point_self', 'attendance.request_correction',
+            'leaves.request_self',
+            'timesheets.log_self',
+            'badges.view_self',
+        ]));
+        $roleEmployee->permissions()->sync($empPerms->pluck('id'));
+
+        // 5. Départements & Postes NTEMO Consulting
+        $depDir = Department::firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => 'DIR'],
+            ['id' => (string) Str::uuid(), 'name' => 'Direction Générale']
+        );
+        $depRH = Department::firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => 'RH'],
+            ['id' => (string) Str::uuid(), 'name' => 'Ressources Humaines & Administration']
+        );
+        $depTech = Department::firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => 'TECH'],
+            ['id' => (string) Str::uuid(), 'name' => 'Ingénierie & Projets Numériques']
+        );
+
+        $posDG = Position::firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => 'POS-DG'],
+            ['id' => (string) Str::uuid(), 'title' => 'Directeur Général']
+        );
+        $posRH = Position::firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => 'POS-RH'],
+            ['id' => (string) Str::uuid(), 'title' => 'Responsable Ressources Humaines']
+        );
+        $posLeadTech = Position::firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => 'POS-TECH'],
+            ['id' => (string) Str::uuid(), 'title' => 'Lead Tech & Suivi de Projets']
+        );
+        $posDev = Position::firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => 'POS-DEV'],
+            ['id' => (string) Str::uuid(), 'title' => 'Ingénieur Logiciel Full-Stack']
+        );
+
+        // 6. Utilisateurs Clés pour les 5 Rôles du Cahier des Charges
+        $usersConfig = [
+            [
+                'email' => 'admin@ntemo.com',
+                'name' => 'Super Administrateur',
+                'role' => $roleSuperAdmin,
+                'matricule' => 'NTM-2026-000',
+                'dep' => $depDir,
+                'pos' => $posDG,
+                'first' => 'Admin',
+                'last' => 'NTEMO',
+            ],
+            [
+                'email' => 'direction@ntemo.com',
+                'name' => 'Glade NTOLANY (Direction / Lead Tech)',
+                'role' => $roleDirection,
+                'matricule' => 'NTM-2026-001',
+                'dep' => $depDir,
+                'pos' => $posLeadTech,
+                'first' => 'Glade',
+                'last' => 'NTOLANY',
+            ],
+            [
+                'email' => 'rh@ntemo.com',
+                'name' => 'Awa NDIAYE (Responsable RH)',
+                'role' => $roleRH,
+                'matricule' => 'NTM-2026-002',
+                'dep' => $depRH,
+                'pos' => $posRH,
+                'first' => 'Awa',
+                'last' => 'NDIAYE',
+            ],
+            [
+                'email' => 'manager@ntemo.com',
+                'name' => 'Jean MAVOUNGOU (Chef de Projet)',
+                'role' => $roleManager,
+                'matricule' => 'NTM-2026-003',
+                'dep' => $depTech,
+                'pos' => $posLeadTech,
+                'first' => 'Jean',
+                'last' => 'MAVOUNGOU',
+            ],
+            [
+                'email' => 'collaborateur@ntemo.com',
+                'name' => 'Koffi AMEGAN (Collaborateur)',
+                'role' => $roleEmployee,
+                'matricule' => 'NTM-2026-004',
+                'dep' => $depTech,
+                'pos' => $posDev,
+                'first' => 'Koffi',
+                'last' => 'AMEGAN',
+            ],
+        ];
+
+        foreach ($usersConfig as $cfg) {
+            $user = User::updateOrCreate(
+                ['email' => $cfg['email']],
+                [
+                    'id' => (string) Str::uuid(),
+                    'organization_id' => $organization->id,
+                    'name' => $cfg['name'],
+                    'password' => Hash::make('password'),
+                    'is_active' => true,
+                ]
+            );
+
+            $user->roles()->sync([$cfg['role']->id]);
+
+            Employee::updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'id' => (string) Str::uuid(),
+                    'organization_id' => $organization->id,
+                    'department_id' => $cfg['dep']->id,
+                    'position_id' => $cfg['pos']->id,
+                    'matricule' => $cfg['matricule'],
+                    'first_name' => $cfg['first'],
+                    'last_name' => $cfg['last'],
+                    'email' => $cfg['email'],
+                    'hire_date' => '2026-01-01',
+                    'status' => 'ACTIVE',
+                ]
+            );
+        }
     }
 }

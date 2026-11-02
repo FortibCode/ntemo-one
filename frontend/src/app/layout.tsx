@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
-  title: "NTEMO ONE - Plateforme RH & Présences",
-  description: "Plateforme intégrée de gestion des ressources humaines, présences et projets pour NTEMO Consulting",
+  title: "NTEMO ONE - Plateforme Intégrée RH, Présences & Automatisation",
+  description: "Plateforme intégrée pour NTEMO Consulting - Présences QR 15s, Badges, Congés, Moteur Documentaire et Projets",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -13,7 +19,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr" className="h-full antialiased font-sans">
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900">{children}</body>
+      <body className="min-h-full flex flex-col bg-slate-950 text-slate-100">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

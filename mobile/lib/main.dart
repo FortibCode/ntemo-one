@@ -51,6 +51,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Image.asset(
+            'assets/logo.png',
+            errorBuilder: (_, __, ___) => const Icon(Icons.business_center),
+          ),
+        ),
         title: const Text(
           'NTEMO ONE',
           style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
