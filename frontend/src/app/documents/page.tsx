@@ -23,6 +23,7 @@ const FORMAT_STYLES: Record<string, string> = {
   PDF: "bg-rose-500/15 text-rose-300 border-rose-500/30",
   DOCX: "bg-sky-500/15 text-sky-300 border-sky-500/30",
   XLSX: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  PPTX: "bg-amber-500/15 text-amber-300 border-amber-500/30",
 };
 
 const inputCls =
@@ -192,7 +193,7 @@ export default function DocumentsAdminPage() {
         <div className="pb-6 border-b border-slate-800">
           <h1 className="text-2xl font-bold text-white">📄 Moteur documentaire</h1>
           <p className="text-xs text-slate-400 mt-1">
-            Attestations, contrats, ordres de mission et courriers en PDF ou Word, bilans Excel — chaque fichier est
+            Attestations, contrats, ordres de mission, courriers et présentations en PDF, Word ou PowerPoint, bilans Excel — chaque fichier est
             tracé avec une empreinte SHA-256 (&sect;3.3)
           </p>
         </div>

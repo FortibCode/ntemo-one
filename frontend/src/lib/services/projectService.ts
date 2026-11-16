@@ -107,6 +107,11 @@ export const projectService = {
   async deleteTask(id: string): Promise<void> {
     await apiClient.delete(`/tasks/${id}`);
   },
+  /** Bilan de projet PowerPoint (responsable du projet ou Direction). */
+  downloadReport(project: { id: string; code: string | null; name: string }): Promise<void> {
+    const slug = (project.code || project.name).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return apiClient.download(`/projects/${project.id}/report`, `bilan-${slug}.pptx`);
+  },
   async myTasks(): Promise<TaskItem[]> {
     return (await apiClient.get<Envelope<TaskItem[]>>('/tasks/mine')).data;
   },

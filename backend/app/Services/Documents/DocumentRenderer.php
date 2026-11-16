@@ -15,7 +15,7 @@ use PhpOffice\PhpWord\Shared\Html as WordHtml;
  */
 class DocumentRenderer
 {
-    public const SUPPORTED_FORMATS = ['PDF', 'DOCX'];
+    public const SUPPORTED_FORMATS = ['PDF', 'DOCX', 'PPTX'];
 
     /** Balise de variable : {{ employee.full_name }} (espaces tolérés). */
     private const PLACEHOLDER = '/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/';
@@ -64,7 +64,8 @@ class DocumentRenderer
         return match (strtoupper($format)) {
             'PDF' => $this->toPdf($bodyHtml, $meta),
             'DOCX' => $this->toDocx($bodyHtml, $meta),
-            default => throw new InvalidArgumentException("Format de sortie « {$format} » non pris en charge par les modèles (PDF ou DOCX)."),
+            'PPTX' => $this->toPptx($bodyHtml, $meta),
+            default => throw new InvalidArgumentException("Format de sortie « {$format} » non pris en charge par les modèles (PDF, DOCX ou PPTX)."),
         };
     }
 
@@ -129,6 +130,81 @@ class DocumentRenderer
         } finally {
             @unlink($tmp);
         }
+    }
+
+    /**
+     * Présentation PowerPoint à partir du HTML fusionné :
+     * <h1> (+ premier paragraphe) → diapositive de titre ; chaque <h2> → diapositive
+     * à puces (paragraphes et éléments de liste) ; chaque <table> → diapositive tableau.
+     */
+    public function toPptx(string $bodyHtml, array $meta): string
+    {
+        $builder = new PptxBuilder($meta['title'], $meta['organization'], $this->logoPath(), $this->footerText($meta));
+
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="UTF-8"><body>' . $bodyHtml . '</body>', LIBXML_NONET);
+        libxml_clear_errors();
+        $body = $dom->getElementsByTagName('body')->item(0);
+
+        $text = fn (\DOMNode $n) => trim(preg_replace('/\s+/u', ' ', $n->textContent) ?? '');
+        $title = $meta['title'];
+        $subtitle = null;
+        $section = null;
+        $bullets = [];
+        $flush = function () use (&$section, &$bullets, $builder) {
+            if ($section !== null) {
+                $builder->bulletSlide($section, $bullets);
+            }
+            $section = null;
+            $bullets = [];
+        };
+
+        foreach ($body?->childNodes ?? [] as $node) {
+            if (!$node instanceof \DOMElement) {
+                continue;
+            }
+            $tag = strtolower($node->tagName);
+            if ($tag === 'h1') {
+                $title = $text($node);
+            } elseif ($tag === 'h2') {
+                $flush();
+                $section = $text($node);
+            } elseif ($tag === 'table') {
+                // Le tableau prend le titre de sa section (« suite » si la section a déjà ses puces)
+                $tableTitle = $section === null ? $title : ($bullets ? "{$section} (suite)" : $section);
+                $flush();
+                $rows = [];
+                foreach ($node->getElementsByTagName('tr') as $tr) {
+                    $cells = [];
+                    foreach ($tr->childNodes as $cell) {
+                        if ($cell instanceof \DOMElement && in_array(strtolower($cell->tagName), ['td', 'th'], true)) {
+                            $cells[] = $text($cell);
+                        }
+                    }
+                    $rows[] = $cells;
+                }
+                $headers = array_shift($rows) ?? [];
+                $builder->tableSlide($tableTitle, $headers, $rows);
+            } elseif (in_array($tag, ['ul', 'ol'], true)) {
+                foreach ($node->getElementsByTagName('li') as $li) {
+                    $bullets[] = $text($li);
+                }
+            } elseif ($text($node) !== '') {
+                if ($section === null && $subtitle === null && $builder->count() === 0) {
+                    $subtitle = $text($node);
+                } elseif ($section !== null) {
+                    $bullets[] = $text($node);
+                }
+            }
+        }
+        $flush();
+
+        // La diapositive de titre est insérée en tête une fois le titre connu
+        $final = new PptxBuilder($meta['title'], $meta['organization'], $this->logoPath(), $this->footerText($meta));
+        $final->titleSlide($title, $subtitle, $meta['organization'] . ' — Réf. ' . $meta['reference']);
+
+        return $final->append($builder)->build();
     }
 
     public function logoPath(): string

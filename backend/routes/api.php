@@ -118,6 +118,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/projects', [ProjectController::class, 'store']);
             Route::get('/projects/{id}', [ProjectController::class, 'show']);
             Route::put('/projects/{id}', [ProjectController::class, 'update']);
+            Route::get('/projects/{id}/report', [ProjectController::class, 'report']);
             Route::post('/projects/{id}/tasks', [ProjectController::class, 'storeTask']);
             Route::get('/tasks/mine', [ProjectController::class, 'myTasks']);
             Route::put('/tasks/{id}', [ProjectController::class, 'updateTask']);

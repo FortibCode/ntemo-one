@@ -30,6 +30,7 @@ class DocumentTemplateSeeder extends Seeder
             'missions' => 'Ordres de mission',
             'contrats' => 'Contrats RH',
             'courriers' => 'Courriers administratifs',
+            'presentations' => 'Présentations',
         ] as $slug => $name) {
             $categories[$slug] = DocumentCategory::firstOrCreate(
                 ['organization_id' => $organization->id, 'slug' => $slug],
@@ -154,6 +155,47 @@ HTML,
 <tr><td style="height:25mm"></td><td></td></tr>
 </table>
 <p>Fait en deux exemplaires à {{organization.city}}, le {{current.date}}.</p>
+HTML,
+            ],
+            [
+                'code' => 'PRESENTATION_COMMERCIALE',
+                'category' => 'presentations',
+                'title' => 'Trame de présentation commerciale',
+                'format' => 'PPTX',
+                'description' => 'Présentation client à la charte NTEMO (PowerPoint modifiable).',
+                'fields' => [
+                    ['key' => 'client.nom', 'label' => 'Client', 'type' => 'text'],
+                    ['key' => 'presentation.objet', 'label' => 'Objet de la présentation', 'type' => 'text'],
+                    ['key' => 'presentation.contexte', 'label' => 'Contexte et enjeux du client', 'type' => 'textarea'],
+                    ['key' => 'presentation.proposition', 'label' => 'Notre proposition', 'type' => 'textarea'],
+                    ['key' => 'presentation.delai', 'label' => 'Délai de réalisation', 'type' => 'text'],
+                    ['key' => 'presentation.budget', 'label' => 'Budget indicatif (FCFA)', 'type' => 'number'],
+                ],
+                'content' => <<<'HTML'
+<h1>{{presentation.objet}}</h1>
+<p>Proposition à l'attention de {{client.nom}} — {{current.date}}</p>
+<h2>Contexte et enjeux</h2>
+<p>{{presentation.contexte}}</p>
+<h2>Notre proposition</h2>
+<p>{{presentation.proposition}}</p>
+<table>
+<tr><th>Élément</th><th>Engagement</th></tr>
+<tr><td>Délai de réalisation</td><td>{{presentation.delai}}</td></tr>
+<tr><td>Budget indicatif</td><td>{{presentation.budget}} FCFA</td></tr>
+<tr><td>Interlocuteur</td><td>{{employee.full_name}} — {{employee.position}}</td></tr>
+</table>
+<h2>Pourquoi {{organization.name}}</h2>
+<ul>
+<li>Une équipe pluridisciplinaire basée à {{organization.city}}</li>
+<li>Une méthode de suivi de projet transparente et outillée</li>
+<li>Un engagement sur les délais et la qualité de service</li>
+</ul>
+<h2>Prochaines étapes</h2>
+<ul>
+<li>Validation de la proposition par {{client.nom}}</li>
+<li>Réunion de lancement et planning détaillé</li>
+<li>Démarrage de la mission</li>
+</ul>
 HTML,
             ],
             [

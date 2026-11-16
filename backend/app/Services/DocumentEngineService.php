@@ -106,7 +106,7 @@ class DocumentEngineService
 
         $format = strtoupper($template->output_format);
         if (!in_array($format, DocumentRenderer::SUPPORTED_FORMATS, true)) {
-            throw new InvalidArgumentException("Format « {$format} » non pris en charge pour les modèles (PDF ou DOCX).");
+            throw new InvalidArgumentException("Format « {$format} » non pris en charge pour les modèles (PDF, DOCX ou PPTX).");
         }
 
         // Fusion avant toute écriture : une variable manquante refuse la génération

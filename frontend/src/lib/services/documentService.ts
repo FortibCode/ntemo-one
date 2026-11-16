@@ -22,7 +22,7 @@ export interface DocumentTemplate {
   id: string;
   title: string;
   code: string | null;
-  output_format: 'PDF' | 'DOCX' | string;
+  output_format: 'PDF' | 'DOCX' | 'PPTX' | string;
   description: string | null;
   available_variables: TemplateField[] | null;
   category: { id: string; name: string } | null;

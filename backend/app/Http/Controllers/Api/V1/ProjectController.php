@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\NotificationService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -225,6 +226,79 @@ class ProjectController extends Controller
         app(AuditLogger::class)->record('task.deleted', $task, [], ['title' => $task->title]);
 
         return response()->json(['success' => true, 'message' => 'Tâche supprimée.']);
+    }
+
+    /**
+     * Bilan de projet au format PowerPoint (§3.3 « rapports d'activité et bilans de projets »).
+     */
+    public function report(Request $request, string $id): HttpResponse|JsonResponse
+    {
+        $user = $request->user();
+        $project = $this->findProject($user, $id)->load(['projectManager', 'tasks.assignee']);
+        if (!$this->canManage($user, $project) && !$user->hasPermission('dashboard.view')) {
+            return $this->forbidden('Le bilan de projet est réservé au responsable du projet et à la Direction.');
+        }
+
+        $tz = $user->organization?->timezone ?: 'Africa/Brazzaville';
+        $today = $this->today($user);
+        $approved = TimeEntry::where('project_id', $project->id)->where('status', 'APPROVED');
+        $hours = (float) (clone $approved)->sum('hours');
+        $byPerson = (clone $approved)->with('employee:id,first_name,last_name')
+            ->get()->groupBy('employee_id')
+            ->map(fn ($entries) => [$entries->first()->employee?->full_name ?? '—', (float) $entries->sum('hours')])
+            ->sortByDesc(1)->values();
+
+        $payload = $this->projectPayload($project, $today, $hours, $user);
+        $stats = $payload['stats'];
+        $fmt = fn (?string $d) => $d ? \Carbon\Carbon::parse($d)->format('d/m/Y') : '—';
+        $num = fn (float $v) => number_format($v, 1, ',', ' ');
+        $statuses = ['TODO' => 'À faire', 'IN_PROGRESS' => 'En cours', 'REVIEW' => 'En revue', 'DONE' => 'Terminée'];
+        $projectStatuses = ['PLANNED' => 'planifié', 'IN_PROGRESS' => 'en cours', 'ON_HOLD' => 'en pause', 'COMPLETED' => 'terminé', 'CANCELLED' => 'annulé'];
+
+        $tasks = $project->tasks->sortBy(fn (Task $t) => [$t->status === 'DONE' ? 1 : 0, $t->due_date?->toDateString() ?? '9999'])->values();
+        $overdue = $tasks->filter(fn (Task $t) => $this->isOverdue($t, $today));
+
+        $builder = new \App\Services\Documents\PptxBuilder(
+            "Bilan — {$project->name}",
+            $user->organization?->name ?? 'NTEMO',
+            resource_path('images/logo.png')
+        );
+        $builder->titleSlide(
+            "Bilan de projet — {$project->name}",
+            ($project->code ? "{$project->code} • " : '') . 'Situation au ' . \Carbon\Carbon::now($tz)->format('d/m/Y'),
+            ($user->organization?->name ?? '') . ' — Responsable : ' . ($project->projectManager?->full_name ?? '—')
+        );
+        $builder->kpiSlide('Indicateurs clés', [
+            ['Avancement', $stats['progress_percentage'] . ' %'],
+            ['Tâches terminées', "{$stats['tasks_done']} / {$stats['tasks_total']}"],
+            ['Tâches en retard', (string) $stats['tasks_overdue']],
+            ['Heures validées', $num($stats['approved_hours']) . ' h'],
+        ], 'Projet ' . ($projectStatuses[$project->status] ?? $project->status) . ' — du ' . $fmt($payload['start_date']) . ' au ' . $fmt($payload['end_date'])
+            . ($payload['is_late'] ? ' (échéance dépassée)' : '') . '. Heures estimées : ' . $num($stats['estimated_hours']) . ' h.');
+        $builder->tableSlide('Suivi des tâches', ['Tâche', 'Assigné', 'Statut', 'Échéance'], $tasks->map(fn (Task $t) => [
+            $t->title,
+            $t->assignee?->full_name ?? '—',
+            $statuses[$t->status] ?? $t->status,
+            $fmt($t->due_date?->toDateString()) . ($this->isOverdue($t, $today) ? ' ⚠' : ''),
+        ])->all(), $tasks->count() > 12 ? '12 premières tâches affichées sur ' . $tasks->count() . '.' : '⚠ = tâche en retard.');
+        $builder->tableSlide('Temps validé par collaborateur', ['Collaborateur', 'Heures validées'],
+            $byPerson->map(fn ($r) => [$r[0], $num($r[1]) . ' h'])->all() ?: [['Aucune heure validée', '—']]);
+        $builder->bulletSlide('Points d\'attention et prochaines étapes', array_values(array_filter([
+            $overdue->isNotEmpty() ? $overdue->count() . ' tâche(s) en retard : ' . $overdue->pluck('title')->take(4)->implode(', ') . '.' : 'Aucune tâche en retard.',
+            $stats['estimated_hours'] > 0 && $stats['approved_hours'] > $stats['estimated_hours']
+                ? 'Dépassement du temps estimé (' . $num($stats['approved_hours']) . ' h validées pour ' . $num($stats['estimated_hours']) . ' h estimées).' : null,
+            ...$tasks->reject(fn (Task $t) => $t->status === 'DONE')->take(4)->map(fn (Task $t) => "À venir : {$t->title}" . ($t->due_date ? ' (échéance ' . $fmt($t->due_date->toDateString()) . ')' : ''))->all(),
+        ])));
+
+        $content = $builder->build();
+        app(\App\Services\Audit\AuditLogger::class)->record('report.project_exported', $project, ['name' => $project->name]);
+        $slug = Str::slug($project->code ?: $project->name);
+
+        return response($content, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'Content-Disposition' => "attachment; filename=\"bilan-{$slug}.pptx\"",
+            'Cache-Control' => 'no-store',
+        ]);
     }
 
     /**

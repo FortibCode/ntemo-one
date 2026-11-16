@@ -134,6 +134,29 @@ class ProjectManagementTest extends TestCase
             ->assertJsonPath('data.tasks.0.approved_hours', 3);
     }
 
+    public function test_project_report_is_a_powerpoint_for_the_manager_only(): void
+    {
+        $project = $this->project();
+        $this->actingAs($this->pm, 'sanctum')
+            ->postJson("/api/v1/projects/{$project->id}/tasks", ['title' => 'Recette', 'assigned_to' => $this->devEmployee->id, 'due_date' => '2026-11-01']);
+
+        $this->actingAs($this->dev, 'sanctum')->getJson("/api/v1/projects/{$project->id}/report")->assertStatus(403);
+
+        $response = $this->actingAs($this->pm, 'sanctum')->get("/api/v1/projects/{$project->id}/report");
+        $response->assertOk();
+        $this->assertStringContainsString('presentationml', $response->headers->get('Content-Type'));
+
+        $tmp = tempnam(sys_get_temp_dir(), 'pptx');
+        file_put_contents($tmp, $response->getContent());
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($tmp) === true);
+        $this->assertStringContainsString('Projet test', $zip->getFromName('ppt/slides/slide1.xml'));
+        $this->assertStringContainsString('Recette', $zip->getFromName('ppt/slides/slide3.xml'));
+        $this->assertStringContainsString('1 tâche(s) en retard', $zip->getFromName('ppt/slides/slide5.xml'));
+        $zip->close();
+        unlink($tmp);
+    }
+
     private function project(): Project
     {
         return Project::create([

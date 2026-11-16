@@ -135,6 +135,7 @@ function TaskRow({
 export default function ProjectsPage() {
   const { user } = useAuth();
   const canCreate = hasPermission(user, "projects.manage");
+  const canSeeAllReports = hasPermission(user, "dashboard.view");
 
   const [tab, setTab] = useState<"projects" | "mine">("projects");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -417,6 +418,16 @@ export default function ProjectsPage() {
                       </p>
                       {detail.description && <p className="text-sm text-slate-300 mt-2 max-w-xl">{detail.description}</p>}
                     </div>
+                    <div className="flex items-center gap-2">
+                    {(detail.can_manage || canSeeAllReports) && (
+                      <button
+                        onClick={() => run(() => projectService.downloadReport(detail), "Bilan PowerPoint téléchargé.")}
+                        disabled={busy}
+                        className="px-3 py-1.5 text-xs font-semibold text-amber-200 border border-amber-500/40 rounded-lg hover:bg-amber-500/10 whitespace-nowrap"
+                      >
+                        📊 Bilan PowerPoint
+                      </button>
+                    )}
                     {detail.can_manage ? (
                       <select
                         value={detail.status}
@@ -434,6 +445,7 @@ export default function ProjectsPage() {
                     ) : (
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${PROJECT_STATUS[detail.status]?.cls}`}>{PROJECT_STATUS[detail.status]?.label}</span>
                     )}
+                    </div>
                   </div>
 
                   <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">

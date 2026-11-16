@@ -231,5 +231,32 @@ class DocumentEngineTest extends TestCase
 
         $response->assertStatus(403);
     }
-}
 
+    public function test_generates_a_real_pptx_presentation_from_html_sections(): void
+    {
+        $this->template->update(['output_format' => 'PPTX']);
+        $this->documentEngineService->createTemplateVersion(
+            $this->template,
+            '<h1>Présentation {{employee.full_name}}</h1><p>Sous-titre</p><h2>Contexte</h2><p>Premier point</p>'
+                . '<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table><h2>Suite</h2><ul><li>X</li><li>Y</li></ul>',
+            'v3.0',
+            $this->hrUser
+        );
+
+        $path = $this->actingAs($this->hrUser, 'sanctum')
+            ->postJson('/api/v1/documents/generate', ['template_id' => $this->template->id, 'employee_id' => $this->employee->id])
+            ->assertCreated()->assertJsonPath('data.output_format', 'PPTX')
+            ->json('data.file_path');
+
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open(Storage::disk('local')->path($path)) === true);
+        $this->assertNotFalse($zip->getFromName('ppt/presentation.xml'));
+        // Titre + « Contexte » + tableau « Contexte (suite) » + « Suite »
+        $this->assertNotFalse($zip->getFromName('ppt/slides/slide4.xml'));
+        $this->assertFalse($zip->getFromName('ppt/slides/slide5.xml'));
+        $this->assertStringContainsString('Sylvie Makosso', $zip->getFromName('ppt/slides/slide1.xml'));
+        $this->assertStringContainsString('Contexte (suite)', $zip->getFromName('ppt/slides/slide3.xml'));
+        $this->assertNotFalse($zip->getFromName('ppt/media/logo.png'));
+        $zip->close();
+    }
+}
