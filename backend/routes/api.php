@@ -40,12 +40,21 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('employees', EmployeeController::class);
 
             // Module Présences & Pointage QR Dynamique
-            Route::post('/attendance/qr-session', [AttendanceController::class, 'generateQrSession']);
             Route::post('/attendance/punch', [AttendanceController::class, 'punch']);
             Route::get('/attendance/my-records', [AttendanceController::class, 'myAttendances']);
-            Route::get('/attendance/corrections', [AttendanceController::class, 'corrections']);
             Route::post('/attendance/corrections', [AttendanceController::class, 'requestCorrection']);
-            Route::post('/attendance/corrections/{id}/review', [AttendanceController::class, 'reviewCorrection']);
+
+            // Borne de pointage : seuls les comptes terminaux / RH génèrent des QR (anti-fraude)
+            Route::middleware(EnsureUserHasPermission::class . ':attendance.scan_device')->group(function () {
+                Route::get('/attendance/devices', [AttendanceController::class, 'devices']);
+                Route::post('/attendance/qr-session', [AttendanceController::class, 'generateQrSession']);
+            });
+
+            // Traitement des régularisations
+            Route::middleware(EnsureUserHasPermission::class . ':attendance.approve_correction')->group(function () {
+                Route::get('/attendance/corrections', [AttendanceController::class, 'corrections']);
+                Route::post('/attendance/corrections/{id}/review', [AttendanceController::class, 'reviewCorrection']);
+            });
 
             // Module Badges Virtuels & Contrôle
             Route::get('/badges', [BadgeController::class, 'index']);

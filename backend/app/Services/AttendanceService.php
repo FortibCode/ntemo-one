@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AttendanceCorrection;
 use App\Models\AttendanceDevice;
 use App\Models\AttendanceEvent;
 use App\Models\AttendanceDay;
@@ -145,11 +146,40 @@ class AttendanceService
     }
 
     /**
+     * Applique une régularisation approuvée : crée l'événement manquant (source MANUAL_OVERRIDE)
+     * et recalcule la journée. L'heure demandée est exprimée dans le fuseau de l'organisation.
+     */
+    public function applyApprovedCorrection(AttendanceCorrection $correction, Employee $employee): AttendanceEvent
+    {
+        $timezone = $employee->organization?->timezone ?: 'Africa/Brazzaville';
+        $date = $correction->date->toDateString();
+        $time = substr((string) $correction->requested_time, 0, 5);
+
+        $recordedAt = Carbon::createFromFormat('Y-m-d H:i', "{$date} {$time}", $timezone)
+            ->setTimezone(config('app.timezone'));
+
+        $event = AttendanceEvent::create([
+            'id' => (string) Str::uuid(),
+            'organization_id' => $employee->organization_id,
+            'employee_id' => $employee->id,
+            'recorded_at' => $recordedAt,
+            'type' => $correction->requested_event_type,
+            'source' => 'MANUAL_OVERRIDE',
+            'device_meta' => "Régularisation {$correction->id}",
+            'is_verified' => true,
+        ]);
+
+        $this->updateDailyAttendance($employee, $event, $date);
+
+        return $event;
+    }
+
+    /**
      * Calcule et met à jour la synthèse de la journée sans jamais altérer les événements bruts.
      */
-    protected function updateDailyAttendance(Employee $employee, AttendanceEvent $event): void
+    protected function updateDailyAttendance(Employee $employee, AttendanceEvent $event, ?string $date = null): void
     {
-        $today = $event->recorded_at->toDateString();
+        $today = $date ?? $event->recorded_at->toDateString();
 
         $dayRecord = AttendanceDay::firstOrCreate(
             [
@@ -169,6 +199,12 @@ class AttendanceService
 
         if ($event->type === 'OUT' && (!$dayRecord->last_check_out || $event->recorded_at->isAfter($dayRecord->last_check_out))) {
             $dayRecord->last_check_out = $event->recorded_at;
+        }
+
+        // Une régularisation peut combler un oubli : la journée n'est plus en anomalie
+        if ($event->source === 'MANUAL_OVERRIDE' && $dayRecord->first_check_in && $dayRecord->last_check_out) {
+            $dayRecord->has_anomaly = false;
+            $dayRecord->anomaly_reason = null;
         }
 
         // Calcul du temps travaillé si entrée et sortie présentes

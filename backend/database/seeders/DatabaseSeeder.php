@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Department;
 use App\Models\Position;
 use App\Models\Employee;
+use App\Models\AttendanceDevice;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -263,7 +264,7 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($usersConfig as $cfg) {
-            $user = User::updateOrCreate(
+            $user = User::firstOrCreate(
                 ['email' => $cfg['email']],
                 [
                     'id' => (string) Str::uuid(),
@@ -276,7 +277,7 @@ class DatabaseSeeder extends Seeder
 
             $user->roles()->sync([$cfg['role']->id]);
 
-            Employee::updateOrCreate(
+            Employee::firstOrCreate(
                 ['user_id' => $user->id],
                 [
                     'id' => (string) Str::uuid(),
@@ -292,5 +293,18 @@ class DatabaseSeeder extends Seeder
                 ]
             );
         }
+
+        // 7. Borne de pointage d'accueil (QR dynamique 15 s)
+        AttendanceDevice::firstOrCreate(
+            ['device_identifier' => 'KIOSK-ENTREE-01'],
+            [
+                'id' => (string) Str::uuid(),
+                'organization_id' => $organization->id,
+                'name' => 'Borne Accueil — Entrée principale',
+                'secret_key' => Str::random(64),
+                'type' => 'WALL_KIOSK',
+                'is_active' => true,
+            ]
+        );
     }
 }

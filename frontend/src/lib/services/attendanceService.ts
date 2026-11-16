@@ -1,154 +1,92 @@
 // =============================================================================
 // Attendance Service — NTEMO ONE
+// Borne QR dynamique (permission `attendance.scan_device`) et régularisations
+// (permission `attendance.approve_correction`).
 // =============================================================================
 
-import { apiClient, ApiResponse, QueryParams } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface AttendanceRecord {
+export interface AttendanceDevice {
   id: string;
-  employee_id: string;
-  employee_name: string;
-  date: string;
-  check_in: string | null;
-  check_out: string | null;
-  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'HALF_DAY' | 'ON_LEAVE';
-  hours_worked: number | null;
-  overtime_hours: number | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
+  name: string;
+  device_identifier: string;
+  type: string;
+  last_heartbeat_at: string | null;
 }
 
-export interface AttendanceFilters extends QueryParams {
-  employee_id?: string;
-  department_id?: string;
-  date_from?: string;
-  date_to?: string;
-  status?: AttendanceRecord['status'];
-  page?: number;
-  per_page?: number;
-}
-
-export interface CorrectionRequest {
-  id: string;
-  employee_id: string;
-  employee_name: string;
-  attendance_id: string;
-  date: string;
-  field: string;
-  old_value: string | null;
-  new_value: string;
-  reason: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  created_at: string;
-}
-
-export interface CreateCorrectionData {
-  attendance_id: string;
-  field: string;
-  new_value: string;
-  reason: string;
-}
-
-export interface ReviewCorrectionData {
-  status: 'APPROVED' | 'REJECTED';
-  comment?: string;
-}
-
-export interface QrToken {
+export interface QrSession {
+  /** Jeton signé (HMAC) à encoder dans le QR code ; usage unique. */
   token: string;
   expires_at: string;
+  validity_seconds: number;
+  qr_session_id: string;
+  device: { name: string; identifier: string };
 }
 
-export interface AttendanceStats {
-  present_today: number;
-  absent_today: number;
-  late_today: number;
-  on_leave_today: number;
-  average_hours_this_week: number;
-  punctuality_rate: number;
-}
+export type CorrectionStatus = 'PENDING' | 'APPROVED_N1' | 'APPROVED_RH' | 'REJECTED';
 
-export interface PaginatedAttendance {
-  data: AttendanceRecord[];
-  meta?: {
-    current_page: number;
-    from: number | null;
-    last_page: number;
-    per_page: number;
-    to: number | null;
-    total: number;
+export interface CorrectionItem {
+  id: string;
+  date: string;
+  requested_event_type: 'IN' | 'OUT';
+  requested_time: string;
+  reason: string;
+  status: CorrectionStatus;
+  rejection_reason: string | null;
+  reviewed_at: string | null;
+  reviewer_name: string | null;
+  created_at: string | null;
+  employee: {
+    id: string | null;
+    full_name: string | null;
+    matricule: string | null;
+    department: string | null;
   };
+}
+
+export interface CorrectionPage {
+  data: CorrectionItem[];
+  current_page: number;
+  last_page: number;
+  total: number;
+}
+
+interface Envelope<T> {
+  success: boolean;
+  message?: string;
+  data: T;
 }
 
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
-const BASE = '/attendance';
-
 export const attendanceService = {
-  /** Get today's attendance records for all employees. */
-  getTodayAttendance() {
-    return apiClient.get<ApiResponse<AttendanceRecord[]>>(`${BASE}/today`);
+  async devices(): Promise<AttendanceDevice[]> {
+    const res = await apiClient.get<Envelope<AttendanceDevice[]>>('/attendance/devices');
+    return res.data;
   },
 
-  /** Get historical attendance records with filters. */
-  getAttendanceHistory(filters?: AttendanceFilters) {
-    return apiClient.get<PaginatedAttendance>(BASE, filters);
-  },
-
-  /** Check in via QR token. */
-  checkIn(qrToken: string) {
-    return apiClient.post<ApiResponse<AttendanceRecord>>(`${BASE}/check-in`, {
-      qr_token: qrToken,
+  async qrSession(deviceIdentifier: string): Promise<QrSession> {
+    const res = await apiClient.post<Envelope<QrSession>>('/attendance/qr-session', {
+      device_identifier: deviceIdentifier,
     });
+    return res.data;
   },
 
-  /** Check out via QR token. */
-  checkOut(qrToken: string) {
-    return apiClient.post<ApiResponse<AttendanceRecord>>(`${BASE}/check-out`, {
-      qr_token: qrToken,
+  corrections(params: { status?: CorrectionStatus; page?: number } = {}): Promise<CorrectionPage> {
+    return apiClient.get<CorrectionPage>('/attendance/corrections', params);
+  },
+
+  async reviewCorrection(id: string, action: 'APPROVE' | 'REJECT', reason?: string): Promise<string> {
+    const res = await apiClient.post<Envelope<unknown>>(`/attendance/corrections/${id}/review`, {
+      action,
+      reason,
     });
-  },
-
-  /** List correction requests (optionally filtered by status). */
-  getCorrections(status?: CorrectionRequest['status']) {
-    return apiClient.get<ApiResponse<CorrectionRequest[]>>(
-      `${BASE}/corrections`,
-      status ? { status } : undefined,
-    );
-  },
-
-  /** Submit a new correction request. */
-  requestCorrection(data: CreateCorrectionData) {
-    return apiClient.post<ApiResponse<CorrectionRequest>>(
-      `${BASE}/corrections`,
-      data,
-    );
-  },
-
-  /** Approve or reject a correction request. */
-  reviewCorrection(id: string, data: ReviewCorrectionData) {
-    return apiClient.put<ApiResponse<CorrectionRequest>>(
-      `${BASE}/corrections/${id}/review`,
-      data,
-    );
-  },
-
-  /** Generate a new QR token for attendance scanning. */
-  generateQrToken() {
-    return apiClient.post<ApiResponse<QrToken>>(`${BASE}/qr-token`);
-  },
-
-  /** Aggregate attendance statistics. */
-  getAttendanceStats() {
-    return apiClient.get<ApiResponse<AttendanceStats>>(`${BASE}/stats`);
+    return res.message ?? '';
   },
 };
