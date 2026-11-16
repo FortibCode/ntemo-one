@@ -1,89 +1,53 @@
 // =============================================================================
-// Dashboard Service — NTEMO ONE
+// Dashboard Service — NTEMO ONE (permission `dashboard.view`)
 // =============================================================================
 
-import { apiClient, ApiResponse } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+export interface TrendPoint {
+  date: string;
+  present: number;
+  late: number;
+}
+
+export interface RecentEvent {
+  id: string;
+  type: 'IN' | 'OUT' | 'BREAK_IN' | 'BREAK_OUT' | string;
+  source: string;
+  time: string;
+  employee: { full_name: string | null; matricule: string | null; department: string | null };
+}
+
+export interface ContractAlert {
+  kind: 'PROBATION_END' | 'CONTRACT_END';
+  date: string;
+  days_left: number;
+  contract_type: string;
+  employee: { id: string | null; full_name: string | null; matricule: string | null };
+}
 
 export interface DashboardKpis {
-  total_employees: number;
-  present_today: number;
-  absent_today: number;
-  on_leave_today: number;
-  pending_leave_requests: number;
-  pending_corrections: number;
-  active_projects: number;
-  total_hours_this_month: number;
+  date: string;
+  is_working_day: boolean;
+  workforce: { total_employees: number; active_employees: number; on_leave_today: number };
+  attendance: {
+    present_today: number;
+    late_today: number;
+    absent_today: number;
+    attendance_rate_percentage: number;
+    trend: TrendPoint[];
+    recent_events: RecentEvent[];
+  };
+  leaves: { pending_approval_count: number; pending_manager_count: number; pending_hr_count: number };
+  approvals: { pending_corrections: number; pending_timesheets: number };
+  documents: { generated_this_month: number; active_badges: number };
+  projects: { active_projects_count: number; approved_hours_this_month: number };
+  contract_alerts: ContractAlert[];
 }
-
-export interface ActivityItem {
-  id: string;
-  type: 'attendance' | 'leave' | 'document' | 'employee' | 'timesheet';
-  title: string;
-  description: string;
-  actor_name: string;
-  created_at: string;
-}
-
-export interface Alert {
-  id: string;
-  type: 'warning' | 'info' | 'error' | 'success';
-  title: string;
-  message: string;
-  action_url: string | null;
-  created_at: string;
-}
-
-export type ChartPeriod = 'week' | 'month' | 'quarter' | 'year';
-
-export interface ChartData {
-  attendance: Array<{
-    date: string;
-    present: number;
-    absent: number;
-    late: number;
-  }>;
-  leaves_by_type: Array<{
-    type: string;
-    count: number;
-  }>;
-  hours_by_project: Array<{
-    project: string;
-    hours: number;
-  }>;
-  employee_growth: Array<{
-    month: string;
-    count: number;
-  }>;
-}
-
-// ---------------------------------------------------------------------------
-// Service
-// ---------------------------------------------------------------------------
-
-const BASE = '/dashboard';
 
 export const dashboardService = {
-  /** Get key performance indicators for the main dashboard. */
-  getDashboardKpis() {
-    return apiClient.get<ApiResponse<DashboardKpis>>(`${BASE}/kpis`);
-  },
-
-  /** Get recent activity feed. */
-  getRecentActivity() {
-    return apiClient.get<ApiResponse<ActivityItem[]>>(`${BASE}/activity`);
-  },
-
-  /** Get active alerts / notifications for the dashboard. */
-  getAlerts() {
-    return apiClient.get<ApiResponse<Alert[]>>(`${BASE}/alerts`);
-  },
-
-  /** Get chart data for a given period. */
-  getChartData(period: ChartPeriod) {
-    return apiClient.get<ApiResponse<ChartData>>(`${BASE}/charts`, { period });
+  async kpis(): Promise<DashboardKpis> {
+    const res = await apiClient.get<{ success: boolean; data: DashboardKpis }>('/dashboard/kpis');
+    return res.data;
   },
 };

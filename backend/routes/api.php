@@ -35,7 +35,8 @@ Route::prefix('v1')->group(function () {
         // Routes restreintes par organisation active
         Route::middleware(EnsureBelongsToOrganization::class)->group(function () {
             // Module Tableau de Bord & Indicateurs
-            Route::get('/dashboard/kpis', [DashboardController::class, 'kpis']);
+            Route::get('/dashboard/kpis', [DashboardController::class, 'kpis'])
+                ->middleware(EnsureUserHasPermission::class . ':dashboard.view');
 
             // Module Employés
             Route::apiResource('employees', EmployeeController::class);

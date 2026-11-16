@@ -179,7 +179,11 @@ class AttendanceService
      */
     protected function updateDailyAttendance(Employee $employee, AttendanceEvent $event, ?string $date = null): void
     {
-        $today = $date ?? $event->recorded_at->toDateString();
+        $employee->loadMissing('organization');
+        $timezone = $this->timezoneFor($employee);
+
+        // La journée est celle de l'organisation (et non UTC) : un pointage à 00h30 à Brazzaville compte pour le jour même
+        $today = $date ?? $event->recorded_at->copy()->setTimezone($timezone)->toDateString();
 
         $dayRecord = AttendanceDay::firstOrCreate(
             [
@@ -207,13 +211,73 @@ class AttendanceService
             $dayRecord->anomaly_reason = null;
         }
 
-        // Calcul du temps travaillé si entrée et sortie présentes
-        if ($dayRecord->first_check_in && $dayRecord->last_check_out) {
-            $diffMinutes = $dayRecord->first_check_in->diffInMinutes($dayRecord->last_check_out);
-            $dayRecord->worked_minutes = max(0, $diffMinutes);
-        }
+        $this->computeDayMetrics($dayRecord, $this->scheduleFor($employee, $today, $timezone));
 
         $dayRecord->save();
     }
-}
 
+    /**
+     * Horaires du jour selon les paramètres de l'organisation (Paramètres → Pointage).
+     *
+     * @return array{start: Carbon, end: Carbon, lunch_start: Carbon, lunch_end: Carbon, grace: int}
+     */
+    public function scheduleFor(Employee $employee, string $date, ?string $timezone = null): array
+    {
+        $timezone ??= $this->timezoneFor($employee);
+        $config = ($employee->organization?->settings['attendance'] ?? []) + [
+            'working_hours_start' => '08:00',
+            'working_hours_end' => '17:00',
+            'lunch_break_start' => '12:00',
+            'lunch_break_end' => '13:00',
+            'grace_period_minutes' => 15,
+        ];
+
+        $at = fn (string $time) => Carbon::createFromFormat('Y-m-d H:i', "{$date} {$time}", $timezone)
+            ->setTimezone(config('app.timezone'));
+
+        return [
+            'start' => $at($config['working_hours_start']),
+            'end' => $at($config['working_hours_end']),
+            'lunch_start' => $at($config['lunch_break_start']),
+            'lunch_end' => $at($config['lunch_break_end']),
+            'grace' => (int) $config['grace_period_minutes'],
+        ];
+    }
+
+    /**
+     * Retard, durée prévue, pause et temps de travail effectif de la journée.
+     * Un retard est constaté au-delà de la tolérance ; il est alors compté depuis l'heure de début.
+     */
+    public function computeDayMetrics(AttendanceDay $day, array $schedule): void
+    {
+        $lunchMinutes = (int) $schedule['lunch_start']->diffInMinutes($schedule['lunch_end']);
+        $day->scheduled_minutes = max(0, (int) $schedule['start']->diffInMinutes($schedule['end']) - $lunchMinutes);
+
+        if ($day->first_check_in) {
+            $lateBy = (int) $schedule['start']->diffInMinutes($day->first_check_in, false);
+            $day->late_minutes = $lateBy > $schedule['grace'] ? $lateBy : 0;
+            if ($day->status === 'PRESENT' || $day->status === 'LATE') {
+                $day->status = $day->late_minutes > 0 ? 'LATE' : 'PRESENT';
+            }
+        }
+
+        if ($day->first_check_in && $day->last_check_out && $day->last_check_out->gt($day->first_check_in)) {
+            $span = (int) $day->first_check_in->diffInMinutes($day->last_check_out);
+
+            // Chevauchement avec la pause déjeuner, déduit du temps effectif
+            $overlapStart = $day->first_check_in->max($schedule['lunch_start']);
+            $overlapEnd = $day->last_check_out->min($schedule['lunch_end']);
+            $break = $overlapEnd->gt($overlapStart) ? (int) $overlapStart->diffInMinutes($overlapEnd) : 0;
+
+            $day->break_minutes = $break;
+            $day->worked_minutes = max(0, $span - $break);
+            $day->early_departure_minutes = max(0, (int) $day->last_check_out->diffInMinutes($schedule['end'], false));
+            $day->overtime_minutes = max(0, (int) $schedule['end']->diffInMinutes($day->last_check_out, false));
+        }
+    }
+
+    private function timezoneFor(Employee $employee): string
+    {
+        return $employee->organization?->timezone ?: 'Africa/Brazzaville';
+    }
+}

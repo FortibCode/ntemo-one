@@ -287,4 +287,41 @@ class DynamicQrAttendanceTest extends TestCase
             ->postJson('/api/v1/attendance/qr-session', ['device_identifier' => 'KIOSK-ENTREE-01'])
             ->assertStatus(422);
     }
+
+    public function test_lateness_break_and_local_day_are_computed(): void
+    {
+        $this->org->update(['settings' => ['attendance' => [
+            'working_hours_start' => '08:00', 'working_hours_end' => '17:00',
+            'lunch_break_start' => '12:00', 'lunch_break_end' => '13:00',
+            'grace_period_minutes' => 15,
+        ]]]);
+
+        // Arrivée 08h40 heure de Brazzaville (07h40 UTC) : 40 min de retard (> 15 min de tolérance)
+        Carbon::setTestNow(Carbon::parse('2026-11-16 08:40:00', 'Africa/Brazzaville'));
+        $qr = $this->attendanceService->generateDynamicQr($this->device);
+        $this->actingAs($this->userEmployee, 'sanctum')
+            ->postJson('/api/v1/attendance/punch', ['token' => $qr['token'], 'type' => 'IN'])->assertCreated();
+
+        // Départ 17h30 : 8h50 de présence - 1h de pause = 7h50 effectives
+        Carbon::setTestNow(Carbon::parse('2026-11-16 17:30:00', 'Africa/Brazzaville'));
+        $qr = $this->attendanceService->generateDynamicQr($this->device);
+        $this->actingAs($this->userEmployee, 'sanctum')
+            ->postJson('/api/v1/attendance/punch', ['token' => $qr['token'], 'type' => 'OUT'])->assertCreated();
+
+        $day = \App\Models\AttendanceDay::where('employee_id', $this->employee->id)->firstOrFail();
+        $this->assertSame('2026-11-16', $day->date->toDateString());
+        $this->assertSame('LATE', $day->status);
+        $this->assertSame(40, $day->late_minutes);
+        $this->assertSame(60, $day->break_minutes);
+        $this->assertSame(470, $day->worked_minutes);
+        $this->assertSame(30, $day->overtime_minutes);
+        $this->assertSame(480, $day->scheduled_minutes);
+
+        // Pointage à 00h30 heure locale (23h30 UTC la veille) : compté pour le jour local
+        Carbon::setTestNow(Carbon::parse('2026-11-18 00:30:00', 'Africa/Brazzaville'));
+        $qr = $this->attendanceService->generateDynamicQr($this->device);
+        $this->actingAs($this->userEmployee, 'sanctum')
+            ->postJson('/api/v1/attendance/punch', ['token' => $qr['token'], 'type' => 'IN'])->assertCreated();
+        $this->assertDatabaseHas('attendance_days', ['employee_id' => $this->employee->id, 'date' => '2026-11-18']);
+    }
 }

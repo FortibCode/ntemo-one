@@ -87,6 +87,7 @@ class DatabaseSeeder extends Seeder
             // Administration
             ['name' => 'Modifier les paramètres de l\'organisation', 'slug' => 'settings.manage', 'module' => 'administration'],
             ['name' => 'Gérer les rôles et leur attribution', 'slug' => 'roles.manage', 'module' => 'administration'],
+            ['name' => 'Consulter le tableau de bord de pilotage', 'slug' => 'dashboard.view', 'module' => 'dashboard'],
         ];
 
         $permissionModels = [];
@@ -157,7 +158,7 @@ class DatabaseSeeder extends Seeder
         $roleSuperAdmin->permissions()->sync($allPermissions->pluck('id'));
         $roleDirection->permissions()->sync($allPermissions->pluck('id'));
 
-        $rhPerms = $allPermissions->filter(fn($p) => in_array($p->module, ['employees', 'structure', 'contracts', 'documents', 'attendance', 'badges', 'leaves', 'ai']));
+        $rhPerms = $allPermissions->filter(fn($p) => in_array($p->module, ['employees', 'structure', 'contracts', 'documents', 'attendance', 'badges', 'leaves', 'ai', 'dashboard']));
         $roleRH->permissions()->sync($rhPerms->pluck('id'));
 
         $managerPerms = $allPermissions->filter(fn($p) => in_array($p->slug, [
