@@ -129,10 +129,13 @@ Route::prefix('v1')->group(function () {
             Route::post('/timesheets/{id}/review', [ProjectTimesheetController::class, 'reviewTimeEntry']);
 
             // Module Assistant IA pour les Tâches Documentaires Autorêmes
-            Route::get('/ai/conversations', [AiAssistantController::class, 'conversations']);
-            Route::post('/ai/conversations', [AiAssistantController::class, 'createConversation']);
-            Route::post('/ai/conversations/{id}/messages', [AiAssistantController::class, 'sendMessage']);
-            Route::post('/ai/tasks/draft', [AiAssistantController::class, 'generateDraft']);
+            Route::middleware(EnsureUserHasPermission::class . ':ai.use')->group(function () {
+                Route::get('/ai/status', [AiAssistantController::class, 'status']);
+                Route::get('/ai/conversations', [AiAssistantController::class, 'conversations']);
+                Route::post('/ai/conversations', [AiAssistantController::class, 'createConversation']);
+                Route::post('/ai/conversations/{id}/messages', [AiAssistantController::class, 'sendMessage']);
+                Route::post('/ai/tasks/draft', [AiAssistantController::class, 'generateDraft']);
+            });
 
             // Module Paramètres Organisation (lecture ouverte, écriture restreinte)
             Route::get('/settings', [SettingsController::class, 'index']);

@@ -35,4 +35,16 @@ return [
         ],
     ],
 
+    /*
+    | Assistant IA NTEMO (Claude, Anthropic). Sans clé, l'assistant fonctionne en mode
+    | démonstration (réponses types) et l'indique clairement à l'utilisateur.
+    */
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('NTEMO_AI_MODEL', 'claude-opus-5-5'),
+        // low / medium / high : profondeur de réflexion (et coût) des réponses
+        'effort' => env('NTEMO_AI_EFFORT', 'low'),
+        'max_tokens' => (int) env('NTEMO_AI_MAX_TOKENS', 8000),
+    ],
+
 ];
