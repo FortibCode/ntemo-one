@@ -1,110 +1,102 @@
 // =============================================================================
 // Document Service — NTEMO ONE
+// Moteur documentaire (PDF / Word), bilans Excel et badges imprimables.
 // =============================================================================
 
-import { apiClient, ApiResponse, QueryParams } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface Document {
-  id: string;
-  title: string;
-  type: string;
-  template_id: string | null;
-  employee_id: string | null;
-  employee_name: string | null;
-  file_url: string;
-  file_size: number;
-  mime_type: string;
-  checksum: string;
-  status: 'DRAFT' | 'GENERATED' | 'SIGNED' | 'ARCHIVED';
-  generated_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export type FieldType = 'text' | 'date' | 'number' | 'textarea';
 
-export interface DocumentFilters extends QueryParams {
-  employee_id?: string;
-  type?: string;
-  status?: Document['status'];
-  search?: string;
-  page?: number;
-  per_page?: number;
+/** Champ complémentaire à saisir lors de la génération (variables hors fiche employé). */
+export interface TemplateField {
+  key: string;
+  label: string;
+  type: FieldType;
 }
 
 export interface DocumentTemplate {
   id: string;
-  name: string;
-  type: string;
+  title: string;
+  code: string | null;
+  output_format: 'PDF' | 'DOCX' | string;
   description: string | null;
-  variables: string[];
-  is_active: boolean;
+  available_variables: TemplateField[] | null;
+  category: { id: string; name: string } | null;
+  current_version: { id: string; version_number: string } | null;
 }
 
-export interface GenerateDocumentData {
-  template_id: string;
-  employee_id?: string;
-  variables?: Record<string, string>;
-}
-
-export interface DocumentVerification {
-  valid: boolean;
-  document_id: string | null;
-  title: string | null;
+export interface DocumentGeneration {
+  id: string;
+  title: string;
+  template: string | null;
+  output_format: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  file_size_bytes: number | null;
+  file_hash_sha256: string | null;
+  error_message: string | null;
   generated_at: string | null;
+  employee: { full_name: string; matricule: string } | null;
+  requested_by: string | null;
 }
 
-export interface PaginatedDocuments {
-  data: Document[];
-  meta?: {
-    current_page: number;
-    from: number | null;
-    last_page: number;
-    per_page: number;
-    to: number | null;
-    total: number;
-  };
+export interface GenerateResult {
+  id: string;
+  title: string;
+  output_format: string;
+  file_hash_sha256: string;
+}
+
+interface Envelope<T> {
+  success: boolean;
+  message?: string;
+  data: T;
 }
 
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
-const BASE = '/documents';
-
 export const documentService = {
-  /** List documents with optional filters & pagination. */
-  getDocuments(filters?: DocumentFilters) {
-    return apiClient.get<PaginatedDocuments>(BASE, filters);
+  async templates(): Promise<DocumentTemplate[]> {
+    const res = await apiClient.get<Envelope<DocumentTemplate[]>>('/documents/templates');
+    return res.data;
   },
 
-  /** Generate a document from a template. */
-  generateDocument(templateId: string, data: Omit<GenerateDocumentData, 'template_id'> = {}) {
-    return apiClient.post<ApiResponse<Document>>(BASE, {
-      template_id: templateId,
-      ...data,
-    });
+  async generations(): Promise<DocumentGeneration[]> {
+    const res = await apiClient.get<Envelope<DocumentGeneration[]>>('/documents/generations');
+    return res.data;
   },
 
-  /** List available document templates. */
-  getTemplates() {
-    return apiClient.get<ApiResponse<DocumentTemplate[]>>(`${BASE}/templates`);
+  async generate(payload: {
+    template_id: string;
+    employee_id?: string;
+    extra_variables?: Record<string, string>;
+  }): Promise<GenerateResult> {
+    const res = await apiClient.post<Envelope<GenerateResult>>('/documents/generate', payload);
+    return res.data;
   },
 
-  /** Download a document (returns a Blob URL). */
-  async downloadDocument(id: string) {
-    return apiClient.get<ApiResponse<{ download_url: string }>>(
-      `${BASE}/${id}/download`,
+  download(generation: { id: string; title: string; output_format: string }): Promise<void> {
+    return apiClient.download(
+      `/documents/download/${generation.id}`,
+      `${generation.title}.${generation.output_format.toLowerCase()}`,
     );
   },
 
-  /** Verify a document's authenticity by checksum. */
-  verifyDocument(checksum: string) {
-    return apiClient.post<ApiResponse<DocumentVerification>>(
-      `${BASE}/verify`,
-      { checksum },
+  /** Bilan mensuel de présence (.xlsx) — `month` au format AAAA-MM. */
+  downloadMonthlyAttendance(month: string): Promise<void> {
+    return apiClient.download(
+      `/reports/attendance/monthly?month=${encodeURIComponent(month)}`,
+      `bilan-presence-${month}.xlsx`,
     );
+  },
+
+  /** Badge imprimable recto/verso (PDF format carte). */
+  downloadBadge(badgeId: string, badgeNumber: string): Promise<void> {
+    return apiClient.download(`/badges/${badgeId}/print`, `badge-${badgeNumber}.pdf`);
   },
 };

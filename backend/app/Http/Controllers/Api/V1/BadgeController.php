@@ -10,6 +10,8 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Http\Response as HttpResponse;
+use App\Services\Documents\BadgePrintService;
 
 class BadgeController extends Controller
 {
@@ -22,6 +24,13 @@ class BadgeController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        if (!$request->user()->hasPermission('badges.generate_revoke')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Permission insuffisante pour consulter les badges.',
+            ], Response::HTTP_FORBIDDEN);
+        }
+
         $query = Badge::where('organization_id', $request->user()->organization_id)
             ->with(['employee.department', 'employee.position', 'template'])
             ->latest('created_at');
@@ -166,5 +175,36 @@ class BadgeController extends Controller
 
         return response()->json($result, $result['is_valid'] ? Response::HTTP_OK : Response::HTTP_UNPROCESSABLE_ENTITY);
     }
-}
 
+    /**
+     * Badge imprimable recto/verso (PDF, format carte CR80).
+     */
+    public function print(Request $request, string $id, BadgePrintService $printer): HttpResponse|JsonResponse
+    {
+        if (!$request->user()->hasPermission('badges.generate_revoke')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Permission insuffisante pour imprimer des badges.',
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        $badge = Badge::where('id', $id)
+            ->where('organization_id', $request->user()->organization_id)
+            ->firstOrFail();
+
+        if ($badge->status !== 'ACTIVE') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Seul un badge actif peut être imprimé.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $filename = "badge-{$badge->badge_number}.pdf";
+
+        return response($printer->pdf($badge), Response::HTTP_OK, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+}

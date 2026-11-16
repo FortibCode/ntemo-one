@@ -306,5 +306,8 @@ class DatabaseSeeder extends Seeder
                 'is_active' => true,
             ]
         );
+
+        // 8. Modèles documentaires officiels
+        $this->callWith(DocumentTemplateSeeder::class, ['organization' => $organization]);
     }
 }

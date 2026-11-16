@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\AiAssistantController;
 use App\Http\Controllers\Api\V1\SettingsController;
 use App\Http\Controllers\Api\V1\RoleController;
+use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -61,6 +62,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/badges/my-badge', [BadgeController::class, 'myVirtualBadge']);
             Route::post('/badges/issue', [BadgeController::class, 'issue']);
             Route::post('/badges/{badge}/revoke', [BadgeController::class, 'revoke']);
+            Route::get('/badges/{badge}/print', [BadgeController::class, 'print']);
             Route::post('/badges/verify', [BadgeController::class, 'verify']);
 
             // Module Congés & Approbations
@@ -74,6 +76,11 @@ Route::prefix('v1')->group(function () {
             Route::get('/documents/templates', [DocumentEngineController::class, 'templates']);
             Route::post('/documents/generate', [DocumentEngineController::class, 'generate']);
             Route::get('/documents/download/{id}', [DocumentEngineController::class, 'download']);
+            Route::get('/documents/generations', [DocumentEngineController::class, 'generations']);
+
+            // Rapports Excel (bilans mensuels)
+            Route::get('/reports/attendance/monthly', [ReportController::class, 'monthlyAttendance'])
+                ->middleware(EnsureUserHasPermission::class . ':attendance.manage_all');
 
             // Module Notifications & Alertes
             Route::get('/notifications', [NotificationController::class, 'index']);

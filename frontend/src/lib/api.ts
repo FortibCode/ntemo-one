@@ -164,6 +164,40 @@ class ApiClient {
   delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
+
+  /**
+   * Télécharge un fichier protégé (PDF, DOCX, XLSX…) avec le jeton d'authentification
+   * et déclenche l'enregistrement dans le navigateur.
+   */
+  async download(endpoint: string, fallbackName: string): Promise<void> {
+    const headers = new Headers({ Accept: '*/*' });
+    const token = this.getToken();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, { headers });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new ApiError(
+        data?.message || `Téléchargement impossible (${response.status})`,
+        response.status,
+        data?.errors ?? null,
+      );
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') ?? '';
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+    const filename = match ? decodeURIComponent(match[1]) : fallbackName;
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 // Singleton

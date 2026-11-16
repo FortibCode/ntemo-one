@@ -154,6 +154,29 @@ class BadgeManagementTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure(['data', 'current_page', 'total']);
         $this->assertCount(1, $response->json('data'));
+        // Le jeton de sécurité ne fuit jamais dans les listes
+        $this->assertArrayNotHasKey('security_token', $response->json('data.0'));
+
+        // Un collaborateur ne peut pas lister les badges de l'organisation
+        $this->actingAs($this->employeeUser, 'sanctum')->getJson('/api/v1/badges')->assertStatus(403);
+    }
+
+    public function test_hr_can_print_active_badge_as_cr80_pdf(): void
+    {
+        $badge = $this->badgeService->issueBadge($this->employee, null, $this->hrUser);
+
+        $response = $this->actingAs($this->hrUser, 'sanctum')->get("/api/v1/badges/{$badge->id}/print");
+        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $pdf = $response->getContent();
+        $this->assertStringStartsWith('%PDF-', $pdf);
+        // Deux pages (recto / verso) au format carte
+        $this->assertSame(2, preg_match_all('/\/Type\s*\/Page[^s]/', $pdf));
+        $this->assertMatchesRegularExpression('/MediaBox\s*\[\s*0(\.0+)?\s+0(\.0+)?\s+242\.6/', $pdf);
+
+        $this->actingAs($this->employeeUser, 'sanctum')->get("/api/v1/badges/{$badge->id}/print")->assertStatus(403);
+
+        $this->badgeService->revokeBadge($badge, 'Perte', $this->hrUser);
+        $this->actingAs($this->hrUser, 'sanctum')->getJson("/api/v1/badges/{$badge->id}/print")->assertStatus(422);
     }
 }
 
