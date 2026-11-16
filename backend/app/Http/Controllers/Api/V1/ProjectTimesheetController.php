@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
 use App\Services\Audit\AuditLogger;
 use App\Models\Project;
 use App\Models\Task;
@@ -162,11 +163,15 @@ class ProjectTimesheetController extends Controller
         if ($request->action === 'APPROVE') {
             $updated = $this->timesheetService->approveTimeEntry($entry, $request->user());
             $msg = 'Feuille de temps approuvée.';
+            app(NotificationService::class)->notifyEmployee($entry->employee, 'TIMESHEET_DECISION', 'Heures validées',
+                "{$entry->hours} h du " . \Carbon\Carbon::parse($entry->date)->format('d/m/Y') . ' ont été validées.', ['time_entry_id' => $entry->id], $request->user());
             app(AuditLogger::class)->record('timesheet.approved', $entry, ['hours' => $entry->hours, 'date' => (string) $entry->date]);
         } else {
             $request->validate(['reason' => ['required', 'string']]);
             $updated = $this->timesheetService->rejectTimeEntry($entry, $request->user(), $request->reason);
             $msg = 'Feuille de temps rejetée.';
+            app(NotificationService::class)->notifyEmployee($entry->employee, 'TIMESHEET_DECISION', 'Heures rejetées',
+                "{$entry->hours} h du " . \Carbon\Carbon::parse($entry->date)->format('d/m/Y') . " ont été rejetées. Motif : {$request->reason}", ['time_entry_id' => $entry->id], $request->user());
             app(AuditLogger::class)->record('timesheet.rejected', $entry, ['reason' => $request->reason]);
         }
 

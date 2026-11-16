@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Models\LeaveRequest;
@@ -133,6 +134,12 @@ class LeaveController extends Controller
         } catch (InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], Response::HTTP_CONFLICT);
         }
+        app(NotificationService::class)->notifyEmployee($updated->employee, 'LEAVE_DECISION',
+            $request->boolean('approved') ? 'Congé validé par votre responsable' : 'Congé refusé par votre responsable',
+            $request->boolean('approved')
+                ? 'Votre demande du ' . $updated->start_date?->format('d/m/Y') . ' au ' . $updated->end_date?->format('d/m/Y') . ' passe en validation RH.'
+                : 'Votre demande du ' . $updated->start_date?->format('d/m/Y') . ' a été refusée.' . ($request->comments ? " Motif : {$request->comments}" : ''),
+            ['leave_request_id' => $updated->id], $user);
         app(AuditLogger::class)->record('leave.reviewed_n1', $updated, ['approved' => $request->boolean('approved'), 'status' => $updated->status, 'comments' => $request->comments]);
 
         return response()->json([
@@ -179,6 +186,11 @@ class LeaveController extends Controller
         } catch (InvalidArgumentException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], Response::HTTP_CONFLICT);
         }
+        app(NotificationService::class)->notifyEmployee($updated->employee, 'LEAVE_DECISION',
+            $request->boolean('approved') ? 'Congé approuvé' : 'Congé refusé par les RH',
+            'Votre demande du ' . $updated->start_date?->format('d/m/Y') . ' au ' . $updated->end_date?->format('d/m/Y')
+                . ($request->boolean('approved') ? ' est définitivement approuvée.' : ' a été refusée.' . ($request->comments ? " Motif : {$request->comments}" : '')),
+            ['leave_request_id' => $updated->id], $user);
         app(AuditLogger::class)->record('leave.reviewed_hr', $updated, ['approved' => $request->boolean('approved'), 'status' => $updated->status, 'comments' => $request->comments]);
 
         return response()->json([

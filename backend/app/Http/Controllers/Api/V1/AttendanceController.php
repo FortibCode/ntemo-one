@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
 use App\Services\Audit\AuditLogger;
 use App\Models\AttendanceCorrection;
 use App\Models\AttendanceDevice;
@@ -256,6 +257,9 @@ class AttendanceController extends Controller
             });
 
             $message = 'Demande approuvée : le pointage a été régularisé.';
+            app(NotificationService::class)->notifyEmployee($correction->employee, 'CORRECTION_DECISION', 'Régularisation acceptée',
+                'Votre pointage du ' . $correction->date?->format('d/m/Y') . ' (' . substr((string) $correction->requested_time, 0, 5) . ') a été régularisé.',
+                ['correction_id' => $correction->id], $request->user());
             app(AuditLogger::class)->record('attendance.correction_approved', $correction, ['date' => $correction->date?->toDateString(), 'type' => $correction->requested_event_type, 'time' => $correction->requested_time]);
         } else {
             $request->validate(['reason' => ['required', 'string']]);
@@ -267,6 +271,9 @@ class AttendanceController extends Controller
             ]);
 
             $message = 'Demande de régularisation rejetée.';
+            app(NotificationService::class)->notifyEmployee($correction->employee, 'CORRECTION_DECISION', 'Régularisation refusée',
+                'Votre demande pour le ' . $correction->date?->format('d/m/Y') . " a été refusée. Motif : {$request->reason}",
+                ['correction_id' => $correction->id], $request->user());
             app(AuditLogger::class)->record('attendance.correction_rejected', $correction, ['reason' => $request->reason]);
         }
 

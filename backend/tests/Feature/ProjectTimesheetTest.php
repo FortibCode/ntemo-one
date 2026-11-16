@@ -136,6 +136,13 @@ class ProjectTimesheetTest extends TestCase
             'status' => 'APPROVED',
             'approved_by' => $this->managerUser->id,
         ]);
+
+        // Le collaborateur est notifié de la décision
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $this->employeeUser->id,
+            'type' => 'TIMESHEET_DECISION',
+            'title' => 'Heures validées',
+        ]);
     }
 
     public function test_can_reject_timesheet_with_reason(): void
