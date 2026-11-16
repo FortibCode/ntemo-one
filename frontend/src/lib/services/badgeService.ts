@@ -1,81 +1,76 @@
 // =============================================================================
-// Badge Service — NTEMO ONE
+// Badge Service — NTEMO ONE (permission `badges.generate_revoke`)
 // =============================================================================
 
-import { apiClient, ApiResponse, QueryParams } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+export type BadgeStatus = 'ACTIVE' | 'REVOKED' | 'REPLACED' | 'EXPIRED' | string;
 
-export interface Badge {
+export interface BadgeItem {
   id: string;
-  employee_id: string;
-  employee_name: string;
-  matricule: string;
-  department: string;
-  position: string;
-  photo_url: string | null;
-  qr_code_url: string | null;
-  status: 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+  badge_number: string;
+  status: BadgeStatus;
   issued_at: string;
   expires_at: string | null;
-  created_at: string;
-  updated_at: string;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  employee: {
+    id: string;
+    matricule: string;
+    first_name: string;
+    last_name: string;
+    full_name?: string;
+    department?: { name: string } | null;
+    position?: { title: string } | null;
+  } | null;
 }
 
-export interface BadgeFilters extends QueryParams {
-  employee_id?: string;
-  department_id?: string;
-  status?: Badge['status'];
-  search?: string;
-  page?: number;
-  per_page?: number;
+export interface BadgePage {
+  data: BadgeItem[];
+  current_page: number;
+  last_page: number;
+  total: number;
 }
 
-export interface BadgePreview {
-  html: string;
-  image_url: string;
+export interface BadgeVerification {
+  is_valid: boolean;
+  message?: string;
+  badge_number?: string;
+  status?: string;
+  employee?: { full_name: string; matricule: string; department: string | null; position: string | null };
+  issued_at?: string;
+  expires_at?: string | null;
 }
-
-export interface PaginatedBadges {
-  data: Badge[];
-  meta?: {
-    current_page: number;
-    from: number | null;
-    last_page: number;
-    per_page: number;
-    to: number | null;
-    total: number;
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Service
-// ---------------------------------------------------------------------------
-
-const BASE = '/badges';
 
 export const badgeService = {
-  /** List badges with optional filters & pagination. */
-  getBadges(filters?: BadgeFilters) {
-    return apiClient.get<PaginatedBadges>(BASE, filters);
+  list(params: { search?: string; status?: string; page?: number } = {}): Promise<BadgePage> {
+    return apiClient.get<BadgePage>('/badges', params);
   },
 
-  /** Generate a new badge for an employee. */
-  generateBadge(employeeId: string) {
-    return apiClient.post<ApiResponse<Badge>>(BASE, {
+  async issue(employeeId: string, expiresAt?: string): Promise<BadgeItem> {
+    const res = await apiClient.post<{ data: BadgeItem }>('/badges/issue', {
       employee_id: employeeId,
+      expires_at: expiresAt || undefined,
     });
+    return res.data;
   },
 
-  /** Send a badge to the print queue. */
-  printBadge(id: string) {
-    return apiClient.post<ApiResponse<{ job_id: string }>>(`${BASE}/${id}/print`);
+  async revoke(badgeId: string, reason: string): Promise<void> {
+    await apiClient.post(`/badges/${badgeId}/revoke`, { reason });
   },
 
-  /** Get a preview (HTML + image) for a badge. */
-  getBadgePreview(id: string) {
-    return apiClient.get<ApiResponse<BadgePreview>>(`${BASE}/${id}/preview`);
+  /** Vérification d'un jeton scanné ; un badge refusé renvoie 422 avec le motif. */
+  async verify(securityToken: string): Promise<BadgeVerification> {
+    try {
+      return await apiClient.post<BadgeVerification>('/badges/verify', { security_token: securityToken });
+    } catch (err) {
+      const e = err as { status?: number; message?: string };
+      if (e.status === 422) return { is_valid: false, message: e.message };
+      throw err;
+    }
+  },
+
+  print(badge: Pick<BadgeItem, 'id' | 'badge_number'>): Promise<void> {
+    return apiClient.download(`/badges/${badge.id}/print`, `badge-${badge.badge_number}.pdf`);
   },
 };

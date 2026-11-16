@@ -192,10 +192,10 @@ class BadgeController extends Controller
             ->where('organization_id', $request->user()->organization_id)
             ->firstOrFail();
 
-        if ($badge->status !== 'ACTIVE') {
+        if (!$badge->isActive()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Seul un badge actif peut être imprimé.',
+                'message' => 'Seul un badge actif et non expiré peut être imprimé.',
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
