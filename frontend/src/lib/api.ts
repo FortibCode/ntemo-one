@@ -166,6 +166,26 @@ class ApiClient {
   }
 
   /**
+   * Envoi multipart (fichiers). Le navigateur fixe lui-même l'en-tête Content-Type (boundary).
+   */
+  async upload<T>(endpoint: string, form: FormData): Promise<T> {
+    const headers = new Headers({ Accept: 'application/json' });
+    const token = this.getToken();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'POST', headers, body: form });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message =
+        response.status === 413
+          ? 'Fichier trop volumineux pour le serveur.'
+          : data?.message || `Erreur serveur (${response.status})`;
+      throw new ApiError(message, response.status, data?.errors ?? null);
+    }
+    return data as T;
+  }
+
+  /**
    * Télécharge un fichier protégé (PDF, DOCX, XLSX…) avec le jeton d'authentification
    * et déclenche l'enregistrement dans le navigateur.
    */

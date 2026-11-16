@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Services\Audit\AuditLogger;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Services\LeaveService;
@@ -116,12 +118,22 @@ class LeaveController extends Controller
             ->where('organization_id', $user->organization_id)
             ->firstOrFail();
 
-        $updated = $this->leaveService->reviewByManager(
-            $leaveRequest,
-            $user,
-            $request->boolean('approved'),
-            $request->comments
-        );
+        $leaveRequest->loadMissing('employee');
+        if ($denied = $this->guardReview($leaveRequest, $user, true)) {
+            return $denied;
+        }
+
+        try {
+            $updated = $this->leaveService->reviewByManager(
+                $leaveRequest,
+                $user,
+                $request->boolean('approved'),
+                $request->comments
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], Response::HTTP_CONFLICT);
+        }
+        app(AuditLogger::class)->record('leave.reviewed_n1', $updated, ['approved' => $request->boolean('approved'), 'status' => $updated->status, 'comments' => $request->comments]);
 
         return response()->json([
             'success' => true,
@@ -152,12 +164,22 @@ class LeaveController extends Controller
             ->where('organization_id', $user->organization_id)
             ->firstOrFail();
 
-        $updated = $this->leaveService->reviewByHr(
-            $leaveRequest,
-            $user,
-            $request->boolean('approved'),
-            $request->comments
-        );
+        $leaveRequest->loadMissing('employee');
+        if ($denied = $this->guardReview($leaveRequest, $user, false)) {
+            return $denied;
+        }
+
+        try {
+            $updated = $this->leaveService->reviewByHr(
+                $leaveRequest,
+                $user,
+                $request->boolean('approved'),
+                $request->comments
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], Response::HTTP_CONFLICT);
+        }
+        app(AuditLogger::class)->record('leave.reviewed_hr', $updated, ['approved' => $request->boolean('approved'), 'status' => $updated->status, 'comments' => $request->comments]);
 
         return response()->json([
             'success' => true,
@@ -165,5 +187,30 @@ class LeaveController extends Controller
             'data' => $updated,
         ]);
     }
-}
 
+    /**
+     * Séparation des tâches : jamais sa propre demande ; en N+1, uniquement ses collaborateurs
+     * directs (sauf accès à tout le personnel).
+     */
+    private function guardReview(LeaveRequest $leaveRequest, User $user, bool $managerLevel): ?JsonResponse
+    {
+        if ($leaveRequest->employee?->user_id === $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Vous ne pouvez pas valider votre propre demande de congé.',
+                'error_code' => 'SELF_REVIEW_FORBIDDEN',
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        if ($managerLevel && !$user->hasPermission('employees.view_all')
+            && $leaveRequest->employee?->manager_id !== $user->employee?->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Seul le responsable direct du collaborateur peut rendre la décision N+1.',
+                'error_code' => 'NOT_DIRECT_MANAGER',
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        return null;
+    }
+}

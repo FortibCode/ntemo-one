@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -200,6 +201,7 @@ class RoleController extends Controller
 
         // Attacher le rôle (syncWithoutDetaching évite les doublons)
         $targetUser->roles()->syncWithoutDetaching([$role->id]);
+        app(AuditLogger::class)->record('role.assigned', $targetUser, ['role' => $role->slug]);
 
         return response()->json([
             'success' => true,
@@ -253,6 +255,7 @@ class RoleController extends Controller
         }
 
         $targetUser->roles()->detach($role->id);
+        app(AuditLogger::class)->record('role.revoked', $targetUser, [], ['role' => $role->slug]);
 
         return response()->json([
             'success' => true,

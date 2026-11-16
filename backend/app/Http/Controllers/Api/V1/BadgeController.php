@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\Badge;
 use App\Models\Employee;
 use App\Services\BadgeService;
@@ -121,6 +122,7 @@ class BadgeController extends Controller
 
         $expiresAt = $request->expires_at ? Carbon::parse($request->expires_at) : null;
         $badge = $this->badgeService->issueBadge($employee, null, $user, $expiresAt);
+        app(AuditLogger::class)->record('badge.issued', $badge, ['badge_number' => $badge->badge_number, 'employee' => $employee->matricule]);
 
         return response()->json([
             'success' => true,
@@ -151,6 +153,7 @@ class BadgeController extends Controller
             ->firstOrFail();
 
         $revokedBadge = $this->badgeService->revokeBadge($badge, $request->reason, $user);
+        app(AuditLogger::class)->record('badge.revoked', $revokedBadge, ['reason' => $request->reason, 'badge_number' => $revokedBadge->badge_number]);
 
         return response()->json([
             'success' => true,
@@ -200,6 +203,7 @@ class BadgeController extends Controller
         }
 
         $filename = "badge-{$badge->badge_number}.pdf";
+        app(AuditLogger::class)->record('badge.printed', $badge, ['badge_number' => $badge->badge_number]);
 
         return response($printer->pdf($badge), Response::HTTP_OK, [
             'Content-Type' => 'application/pdf',

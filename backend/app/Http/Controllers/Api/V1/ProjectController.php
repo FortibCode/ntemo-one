@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\Employee;
 use App\Models\Project;
 use App\Models\Task;
@@ -108,6 +109,8 @@ class ProjectController extends Controller
             'status' => $data['status'] ?? 'PLANNED',
         ]);
 
+        app(AuditLogger::class)->record('project.created', $project, ['name' => $project->name, 'code' => $project->code]);
+
         return response()->json([
             'success' => true,
             'message' => 'Projet créé.',
@@ -130,7 +133,11 @@ class ProjectController extends Controller
             unset($data['project_manager_id']);
         }
 
+        [$old, $new] = app(AuditLogger::class)->diff($project->only(array_keys($data)), $data);
         $project->update($data);
+        if ($new) {
+            app(AuditLogger::class)->record('project.updated', $project, $new, $old);
+        }
 
         return response()->json([
             'success' => true,
@@ -215,6 +222,7 @@ class ProjectController extends Controller
         }
 
         $task->delete();
+        app(AuditLogger::class)->record('task.deleted', $task, [], ['title' => $task->title]);
 
         return response()->json(['success' => true, 'message' => 'Tâche supprimée.']);
     }

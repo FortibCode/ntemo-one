@@ -206,6 +206,31 @@ export default function DashboardPage() {
               </div>
             )}
 
+            {/* Pièces RH expirées ou proches de l'expiration (§3.4) */}
+            {kpis.document_alerts.length > 0 && (
+              <div className="mt-4 p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl" role="status">
+                <h2 className="text-sm font-bold text-rose-300">
+                  🪪 {kpis.document_alerts.length} pièce{kpis.document_alerts.length > 1 ? "s" : ""} d&rsquo;identité ou
+                  justificatif{kpis.document_alerts.length > 1 ? "s" : ""} à renouveler
+                </h2>
+                <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                  {kpis.document_alerts.slice(0, 5).map((d) => (
+                    <li key={d.id}>
+                      <span className="font-semibold text-white">{d.employee.full_name}</span>{" "}
+                      <span className="font-mono text-slate-500">{d.employee.matricule}</span> — {d.title}{" "}
+                      <span className="text-rose-300">
+                        {d.days_left < 0
+                          ? `expirée depuis ${Math.abs(d.days_left)} j`
+                          : d.days_left === 0
+                            ? "expire aujourd'hui"
+                            : `expire dans ${d.days_left} j`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Indicateurs (§3.5) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mt-6">
               <Tile
@@ -247,6 +272,11 @@ export default function DashboardPage() {
                 {kpis.documents.active_badges} badge(s) actif(s) &bull;{" "}
                 {kpis.projects.approved_hours_this_month.toLocaleString("fr-FR")} h approuvées sur{" "}
                 {kpis.projects.active_projects_count} projet(s)
+                {kpis.projects.overdue_tasks_count > 0 && (
+                  <Link href="/projects" className="block text-rose-300 hover:text-rose-200 font-semibold">
+                    ⚠ {kpis.projects.overdue_tasks_count} tâche(s) en retard
+                  </Link>
+                )}
               </Tile>
             </div>
 

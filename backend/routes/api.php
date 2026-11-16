@@ -14,6 +14,8 @@ use App\Http\Controllers\Api\V1\SettingsController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\ProjectController;
+use App\Http\Controllers\Api\V1\EmployeeDocumentController;
+use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +43,16 @@ Route::prefix('v1')->group(function () {
 
             // Module Employés
             Route::apiResource('employees', EmployeeController::class);
+
+            // GED : pièces du dossier collaborateur
+            Route::get('/employees/{employeeId}/documents', [EmployeeDocumentController::class, 'index']);
+            Route::post('/employees/{employeeId}/documents', [EmployeeDocumentController::class, 'store']);
+            Route::get('/employee-documents/{id}/download', [EmployeeDocumentController::class, 'download']);
+            Route::delete('/employee-documents/{id}', [EmployeeDocumentController::class, 'destroy']);
+
+            // Journal d'audit
+            Route::get('/audit-logs', [AuditLogController::class, 'index'])
+                ->middleware(EnsureUserHasPermission::class . ':audit.view');
 
             // Module Présences & Pointage QR Dynamique
             Route::post('/attendance/punch', [AttendanceController::class, 'punch']);

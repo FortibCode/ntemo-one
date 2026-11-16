@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\AttendanceCorrection;
 use App\Models\AttendanceDevice;
 use App\Models\AttendanceEvent;
@@ -255,6 +256,7 @@ class AttendanceController extends Controller
             });
 
             $message = 'Demande approuvée : le pointage a été régularisé.';
+            app(AuditLogger::class)->record('attendance.correction_approved', $correction, ['date' => $correction->date?->toDateString(), 'type' => $correction->requested_event_type, 'time' => $correction->requested_time]);
         } else {
             $request->validate(['reason' => ['required', 'string']]);
             $correction->update([
@@ -265,6 +267,7 @@ class AttendanceController extends Controller
             ]);
 
             $message = 'Demande de régularisation rejetée.';
+            app(AuditLogger::class)->record('attendance.correction_rejected', $correction, ['reason' => $request->reason]);
         }
 
         return response()->json([

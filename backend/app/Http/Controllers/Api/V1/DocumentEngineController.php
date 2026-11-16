@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\DocumentTemplate;
 use App\Models\DocumentGeneration;
 use App\Models\Employee;
@@ -92,6 +93,8 @@ class DocumentEngineController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
+        app(AuditLogger::class)->record('document.generated', $generation, ['title' => $generation->title, 'format' => $generation->output_format, 'sha256' => $generation->file_hash_sha256]);
+
         return response()->json([
             'success' => true,
             'message' => 'Document généré avec succès.',
@@ -134,6 +137,8 @@ class DocumentEngineController extends Controller
                 'message' => 'Le fichier physique est introuvable sur le stockage sécurisé.',
             ], Response::HTTP_NOT_FOUND);
         }
+
+        app(AuditLogger::class)->record('document.downloaded', $generation, ['title' => $generation->title]);
 
         return Storage::disk('local')->download(
             $generation->file_path,

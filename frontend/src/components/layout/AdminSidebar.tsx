@@ -20,6 +20,7 @@ const navItems = [
 
 const adminNavItems = [
   { label: "Rôles & Permissions", href: "/roles", icon: "🔐", permission: "roles.manage" },
+  { label: "Journal d'audit", href: "/audit", icon: "🧾", permission: "audit.view" },
   { label: "Paramètres & Système", href: "/settings", icon: "⚙️" },
 ];
 

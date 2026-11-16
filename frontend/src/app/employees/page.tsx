@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import AdminSidebar from "@/components/layout/AdminSidebar";
+import EmployeeDocumentsPanel from "@/components/employees/EmployeeDocumentsPanel";
+import { hasPermission, useAuth } from "@/context/AuthContext";
 import { Employee, PaginatedResponse } from "@/types";
 import { api } from "@/services/api";
 
@@ -13,6 +15,10 @@ export default function EmployeesPage() {
   const [statusFilter, setStatusFilter] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { user } = useAuth();
+  const canUploadDocs = hasPermission(user, "documents.upload");
+  const canReadDocs = canUploadDocs || hasPermission(user, "documents.read_confidential");
+  const [dossierFor, setDossierFor] = useState<Employee | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     first_name: "",
@@ -150,6 +156,7 @@ export default function EmployeesPage() {
                       <th className="px-6 py-3.5">Département & Fonction</th>
                       <th className="px-6 py-3.5">Date Embauche</th>
                       <th className="px-6 py-3.5">Statut</th>
+                      {canReadDocs && <th className="px-6 py-3.5 text-right">Dossier</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -180,6 +187,16 @@ export default function EmployeesPage() {
                             {emp.status}
                           </span>
                         </td>
+                        {canReadDocs && (
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => setDossierFor(emp)}
+                              className="px-3 py-1.5 text-xs font-medium text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50"
+                            >
+                              📁 Pièces
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -189,6 +206,14 @@ export default function EmployeesPage() {
           </div>
         </main>
       </div>
+
+      {dossierFor && (
+        <EmployeeDocumentsPanel
+          employee={{ id: dossierFor.id, full_name: dossierFor.full_name, matricule: dossierFor.matricule }}
+          canUpload={canUploadDocs}
+          onClose={() => setDossierFor(null)}
+        />
+      )}
 
       {/* Modal Création Collaborateur */}
       {isModalOpen && (

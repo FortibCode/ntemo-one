@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\Organization;
 use App\Services\AttendanceService;
 use Illuminate\Http\JsonResponse;
@@ -75,6 +76,8 @@ class SettingsController extends Controller
             'working_days.*' => ['string', 'distinct', 'in:monday,tuesday,wednesday,thursday,friday,saturday,sunday'],
         ]);
 
+        $before = ['organization' => $this->organizationPayload($organization), 'settings' => $organization->settings ?? []];
+
         if (!empty($validated['organization'])) {
             $organization->fill($validated['organization']);
         }
@@ -85,6 +88,10 @@ class SettingsController extends Controller
         );
         $organization->settings = $this->mergeSettings($organization->settings ?? [], $settingsInput);
         $organization->save();
+        [$old, $new] = app(AuditLogger::class)->diff($before, ['organization' => $this->organizationPayload($organization), 'settings' => $organization->settings]);
+        if ($new) {
+            app(AuditLogger::class)->record('settings.updated', $organization, $new, $old);
+        }
 
         return response()->json([
             'success' => true,
@@ -164,8 +171,12 @@ class SettingsController extends Controller
         }
 
         unset($merged['qr_expiry_seconds']);
+        [$old, $new] = app(AuditLogger::class)->diff($current, $merged);
         $organization->settings = $this->mergeSettings($organization->settings ?? [], ['attendance' => $merged]);
         $organization->save();
+        if ($new) {
+            app(AuditLogger::class)->record('settings.attendance_updated', $organization, $new, $old);
+        }
 
         return response()->json([
             'success' => true,

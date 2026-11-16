@@ -9,6 +9,7 @@ use App\Models\Badge;
 use App\Models\Contract;
 use App\Models\DocumentGeneration;
 use App\Models\Employee;
+use App\Models\EmployeeDocument;
 use App\Models\LeaveRequest;
 use App\Models\Organization;
 use App\Models\Project;
@@ -121,6 +122,7 @@ class DashboardAnalyticsService
                 'approved_hours_this_month' => $monthlyHours,
             ],
             'contract_alerts' => $this->contractAlerts($orgId, $now),
+            'document_alerts' => $this->documentAlerts($orgId, $now),
         ];
     }
 
@@ -223,6 +225,36 @@ class DashboardAnalyticsService
         usort($alerts, fn ($a, $b) => strcmp($a['date'], $b['date']));
 
         return $alerts;
+    }
+
+    /**
+     * Pièces du dossier RH (CNI, passeport…) expirées ou expirant dans les 30 jours.
+     */
+    private function documentAlerts(string $orgId, CarbonImmutable $now): array
+    {
+        $limit = $now->addDays(self::CONTRACT_ALERT_DAYS)->toDateString();
+
+        return EmployeeDocument::where('organization_id', $orgId)
+            ->whereNotNull('expiration_date')
+            ->whereDate('expiration_date', '<=', $limit)
+            ->with('employee:id,first_name,last_name,matricule')
+            ->orderBy('expiration_date')
+            ->limit(20)
+            ->get()
+            ->map(fn (EmployeeDocument $d) => [
+                'id' => $d->id,
+                'title' => $d->title,
+                'category' => $d->category,
+                'date' => $d->expiration_date->toDateString(),
+                'days_left' => (int) $now->startOfDay()->diffInDays(CarbonImmutable::parse($d->expiration_date->toDateString(), $now->timezone), false),
+                'employee' => [
+                    'id' => $d->employee?->id,
+                    'full_name' => $d->employee?->full_name,
+                    'matricule' => $d->employee?->matricule,
+                ],
+            ])
+            ->values()
+            ->all();
     }
 
     private function isWorkingDay(Organization $organization, CarbonImmutable $date): bool

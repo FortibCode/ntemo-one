@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TimeEntry;
@@ -161,10 +162,12 @@ class ProjectTimesheetController extends Controller
         if ($request->action === 'APPROVE') {
             $updated = $this->timesheetService->approveTimeEntry($entry, $request->user());
             $msg = 'Feuille de temps approuvée.';
+            app(AuditLogger::class)->record('timesheet.approved', $entry, ['hours' => $entry->hours, 'date' => (string) $entry->date]);
         } else {
             $request->validate(['reason' => ['required', 'string']]);
             $updated = $this->timesheetService->rejectTimeEntry($entry, $request->user(), $request->reason);
             $msg = 'Feuille de temps rejetée.';
+            app(AuditLogger::class)->record('timesheet.rejected', $entry, ['reason' => $request->reason]);
         }
 
         return response()->json([

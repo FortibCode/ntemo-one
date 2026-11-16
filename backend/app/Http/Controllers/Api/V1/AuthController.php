@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ class AuthController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
+            app(AuditLogger::class)->record('auth.login_failed', $user, ['email' => $request->email], [], null, $user?->organization_id);
             throw ValidationException::withMessages([
                 'email' => ['Identifiants de connexion invalides.'],
             ]);
@@ -40,6 +42,7 @@ class AuthController extends Controller
 
         $deviceName = $request->input('device_name', 'Web Application');
         $token = $user->createToken($deviceName)->plainTextToken;
+        app(AuditLogger::class)->record('auth.login', $user, ['device' => $deviceName], [], $user);
 
         $user->load(['organization', 'employee.department', 'employee.position', 'roles']);
 
@@ -114,6 +117,7 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
+        app(AuditLogger::class)->record('auth.logout', $request->user());
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Services\Documents\AttendanceReportService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -27,6 +28,7 @@ class ReportController extends Controller
 
         $content = $reports->monthlyWorkbook($organization, $month->startOfMonth());
         $filename = 'bilan-presence-' . $month->format('Y-m') . '.xlsx';
+        app(AuditLogger::class)->record('report.attendance_exported', $organization, ['month' => $month->format('Y-m')]);
 
         return response($content, 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
