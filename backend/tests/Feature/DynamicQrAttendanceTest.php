@@ -91,6 +91,9 @@ class DynamicQrAttendanceTest extends TestCase
 
     public function test_can_generate_15s_dynamic_qr_and_punch_successfully(): void
     {
+        // Arrivée avant l'heure de début (08h00 par défaut) : statut PRESENT, indépendamment de l'heure réelle
+        Carbon::setTestNow(Carbon::parse('2026-11-16 07:55:00', 'Africa/Brazzaville'));
+
         // 1. Générer le QR code pour la borne
         $qrData = $this->attendanceService->generateDynamicQr($this->device);
 

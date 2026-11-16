@@ -12,6 +12,7 @@ use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\Organization;
 use App\Models\Project;
+use App\Models\Task;
 use App\Models\TimeEntry;
 use Carbon\CarbonImmutable;
 
@@ -73,6 +74,12 @@ class DashboardAnalyticsService
 
         // 5. Projets & heures
         $activeProjects = Project::where('organization_id', $orgId)->where('status', 'IN_PROGRESS')->count();
+        $overdueTasks = Task::where('organization_id', $orgId)
+            ->where('status', '!=', 'DONE')
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '<', $today)
+            ->whereHas('project', fn ($q) => $q->whereNotIn('status', ['COMPLETED', 'CANCELLED']))
+            ->count();
         $monthlyHours = (float) TimeEntry::where('organization_id', $orgId)
             ->whereDate('date', '>=', $now->startOfMonth()->toDateString())
             ->whereDate('date', '<=', $now->endOfMonth()->toDateString())
@@ -110,6 +117,7 @@ class DashboardAnalyticsService
             ],
             'projects' => [
                 'active_projects_count' => $activeProjects,
+                'overdue_tasks_count' => $overdueTasks,
                 'approved_hours_this_month' => $monthlyHours,
             ],
             'contract_alerts' => $this->contractAlerts($orgId, $now),

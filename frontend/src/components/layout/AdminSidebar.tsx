@@ -13,7 +13,8 @@ const navItems = [
   { label: "Validation des Congés", href: "/leaves", icon: "🏖️" },
   { label: "Badges Numériques", href: "/badges", icon: "🪪" },
   { label: "Moteur Documentaire", href: "/documents", icon: "📄" },
-  { label: "Projets & Feuilles de Temps", href: "/timesheets", icon: "📈" },
+  { label: "Projets & Tâches", href: "/projects", icon: "📈" },
+  { label: "Feuilles de Temps", href: "/timesheets", icon: "🕒" },
   { label: "Assistant IA NTEMO AI", href: "/ai-assistant", icon: "🤖" },
 ];
 

@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\AiAssistantController;
 use App\Http\Controllers\Api\V1\SettingsController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -89,7 +90,14 @@ Route::prefix('v1')->group(function () {
             Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 
             // Module Projets, Tâches et Feuilles de temps
-            Route::get('/projects', [ProjectTimesheetController::class, 'projects']);
+            Route::get('/projects', [ProjectController::class, 'index']);
+            Route::post('/projects', [ProjectController::class, 'store']);
+            Route::get('/projects/{id}', [ProjectController::class, 'show']);
+            Route::put('/projects/{id}', [ProjectController::class, 'update']);
+            Route::post('/projects/{id}/tasks', [ProjectController::class, 'storeTask']);
+            Route::get('/tasks/mine', [ProjectController::class, 'myTasks']);
+            Route::put('/tasks/{id}', [ProjectController::class, 'updateTask']);
+            Route::delete('/tasks/{id}', [ProjectController::class, 'destroyTask']);
             Route::get('/timesheets', [ProjectTimesheetController::class, 'index']);
             Route::get('/timesheets/my-entries', [ProjectTimesheetController::class, 'myTimeEntries']);
             Route::post('/timesheets/log', [ProjectTimesheetController::class, 'storeTimeEntry']);

@@ -48,18 +48,6 @@ class ProjectTimesheetController extends Controller
     }
 
     /**
-     * Liste des projets de l'organisation.
-     */
-    public function projects(Request $request): JsonResponse
-    {
-        $projects = Project::where('organization_id', $request->user()->organization_id)
-            ->with(['projectManager', 'tasks'])
-            ->get();
-
-        return response()->json(['success' => true, 'data' => $projects]);
-    }
-
-    /**
      * Mes saisies de temps (Collaborateur connecté).
      */
     public function myTimeEntries(Request $request): JsonResponse
