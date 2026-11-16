@@ -82,6 +82,10 @@ class DatabaseSeeder extends Seeder
             // Audit & IA
             ['name' => 'Consulter les journaux d\'audit', 'slug' => 'audit.view', 'module' => 'audit'],
             ['name' => 'Utiliser assistant IA', 'slug' => 'ai.use', 'module' => 'ai'],
+
+            // Administration
+            ['name' => 'Modifier les paramètres de l\'organisation', 'slug' => 'settings.manage', 'module' => 'administration'],
+            ['name' => 'Gérer les rôles et leur attribution', 'slug' => 'roles.manage', 'module' => 'administration'],
         ];
 
         $permissionModels = [];

@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProjectTimesheetController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\AiAssistantController;
+use App\Http\Controllers\Api\V1\SettingsController;
+use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -81,6 +83,24 @@ Route::prefix('v1')->group(function () {
             Route::post('/ai/conversations', [AiAssistantController::class, 'createConversation']);
             Route::post('/ai/conversations/{id}/messages', [AiAssistantController::class, 'sendMessage']);
             Route::post('/ai/tasks/draft', [AiAssistantController::class, 'generateDraft']);
+
+            // Module Paramètres Organisation (lecture ouverte, écriture restreinte)
+            Route::get('/settings', [SettingsController::class, 'index']);
+            Route::get('/settings/attendance', [SettingsController::class, 'getAttendanceConfig']);
+            Route::middleware(EnsureUserHasPermission::class . ':settings.manage')->group(function () {
+                Route::put('/settings', [SettingsController::class, 'update']);
+                Route::put('/settings/attendance', [SettingsController::class, 'updateAttendanceConfig']);
+            });
+
+            // Module Rôles & Permissions (réservé aux administrateurs)
+            Route::middleware(EnsureUserHasPermission::class . ':roles.manage')->group(function () {
+                Route::get('/permissions', [RoleController::class, 'permissions']);
+                Route::get('/roles', [RoleController::class, 'index']);
+                Route::post('/roles/assign', [RoleController::class, 'assignRole']);
+                Route::post('/roles/revoke', [RoleController::class, 'revokeRole']);
+                Route::get('/roles/{id}', [RoleController::class, 'show']);
+                Route::get('/roles/{id}/permissions', [RoleController::class, 'getRolePermissions']);
+            });
         });
     });
 });

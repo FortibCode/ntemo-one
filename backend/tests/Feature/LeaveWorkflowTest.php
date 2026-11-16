@@ -29,6 +29,8 @@ class LeaveWorkflowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Horloge figée : les dates de demande ci-dessous doivent rester dans le futur
+        Carbon::setTestNow(Carbon::parse('2026-11-02 09:00:00'));
 
         $this->org = Organization::create([
             'id' => (string) Str::uuid(),

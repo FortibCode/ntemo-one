@@ -2,6 +2,16 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { apiClient } from "@/lib/api";
+import { api } from "@/services/api";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
+
+/** Synchronise le jeton dans les clients API (ils le mettent en cache au chargement). */
+function syncApiToken(token: string | null) {
+  apiClient.setToken(token);
+  api.setToken(token);
+}
 
 export interface AuthUser {
   id: string;
@@ -12,6 +22,15 @@ export interface AuthUser {
   department: string;
   matricule: string;
   organizationName: string;
+  /** Permissions effectives renvoyées par l'API ('*' = super administrateur). Absent en mode démo. */
+  permissions?: string[];
+}
+
+/** Vérifie une permission côté interface (le backend reste l'autorité finale). */
+export function hasPermission(user: AuthUser | null, slug: string): boolean {
+  if (!user) return false;
+  if (user.role === "super_admin") return true;
+  return !!user.permissions && (user.permissions.includes("*") || user.permissions.includes(slug));
 }
 
 interface AuthContextType {
@@ -108,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password = "password") => {
     try {
       // Tentative d'authentification API Laravel
-      const res = await fetch("http://127.0.0.1:8000/api/v1/auth/login", {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ email, password, device_name: "Web Admin NextJS" }),
@@ -116,15 +135,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (res.ok) {
         const data = await res.json();
+        const apiUser = data.data.user;
         const loggedUser: AuthUser = {
-          id: data.data.user.id,
-          name: data.data.user.name,
-          email: data.data.user.email,
-          role: data.data.user.roles?.[0] || "admin",
-          roleName: data.data.user.roles?.[0] || "Administrateur",
-          department: data.data.employee?.department?.name || "Administration",
-          matricule: data.data.employee?.matricule || "NTM-2026-ADM",
-          organizationName: data.data.organization?.name || "NTEMO Consulting",
+          id: apiUser.id,
+          name: apiUser.name,
+          email: apiUser.email,
+          role: apiUser.roles?.[0] || "employee",
+          roleName: apiUser.role_name || apiUser.roles?.[0] || "Collaborateur",
+          department: apiUser.employee?.department || "Administration",
+          matricule: apiUser.employee?.matricule || "—",
+          organizationName: apiUser.organization?.name || "NTEMO Consulting",
+          permissions: apiUser.permissions ?? [],
         };
         const authToken = data.data.token;
 
@@ -132,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(authToken);
         localStorage.setItem("ntemo_user", JSON.stringify(loggedUser));
         localStorage.setItem("ntemo_token", authToken);
+        syncApiToken(authToken);
         router.push("/");
         return { success: true };
       }
@@ -150,6 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(generatedToken);
       localStorage.setItem("ntemo_user", JSON.stringify(match));
       localStorage.setItem("ntemo_token", generatedToken);
+      syncApiToken(generatedToken);
       router.push("/");
       return { success: true };
     }
@@ -165,6 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(generatedToken);
       localStorage.setItem("ntemo_user", JSON.stringify(account));
       localStorage.setItem("ntemo_token", generatedToken);
+      syncApiToken(generatedToken);
       router.push("/");
     }
   };
@@ -174,6 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     localStorage.removeItem("ntemo_user");
     localStorage.removeItem("ntemo_token");
+    syncApiToken(null);
     router.push("/login");
   };
 
