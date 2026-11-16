@@ -38,7 +38,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
   }
 
-  Widget _errorView(BuildContext context, MobileScannerException error, Widget? _) {
+  Widget _errorView(BuildContext context, MobileScannerException error) {
     final denied = error.errorCode == MobileScannerErrorCode.permissionDenied;
     return ColoredBox(
       color: Colors.black,
