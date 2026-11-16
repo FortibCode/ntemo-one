@@ -310,5 +310,8 @@ class DatabaseSeeder extends Seeder
 
         // 8. Modèles documentaires officiels
         $this->callWith(DocumentTemplateSeeder::class, ['organization' => $organization]);
+
+        // 9. Projets et tâches de démonstration
+        $this->callWith(DemoProjectSeeder::class, ['organization' => $organization]);
     }
 }

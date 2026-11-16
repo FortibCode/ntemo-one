@@ -61,7 +61,7 @@ class DashboardAnalyticsService
         $pendingLeavesN1 = LeaveRequest::where('organization_id', $orgId)->where('status', 'PENDING_N1')->count();
         $pendingLeavesHr = LeaveRequest::where('organization_id', $orgId)->where('status', 'PENDING_HR')->count();
         $pendingCorrections = AttendanceCorrection::where('organization_id', $orgId)->where('status', 'PENDING')->count();
-        $pendingTimesheets = TimeEntry::where('organization_id', $orgId)->where('status', 'PENDING')->count();
+        $pendingTimesheets = TimeEntry::where('organization_id', $orgId)->where('status', 'SUBMITTED')->count();
 
         // 4. Documents & badges
         $monthStart = $now->startOfMonth()->utc();

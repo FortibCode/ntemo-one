@@ -1,120 +1,72 @@
 // =============================================================================
 // Timesheet Service — NTEMO ONE
+// Déclaration (tous) et validation (permission `timesheets.approve`, périmètre équipe/projet).
 // =============================================================================
 
-import { apiClient, ApiResponse, QueryParams } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+export type TimeEntryStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED';
 
-export interface TimesheetEntry {
+export interface ProjectTask {
   id: string;
-  employee_id: string;
-  employee_name: string;
-  project_id: string;
-  project_name: string;
-  date: string;
-  hours: number;
-  description: string | null;
-  status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
-  rejection_reason: string | null;
-  approved_by: string | null;
-  approved_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TimesheetFilters extends QueryParams {
-  employee_id?: string;
-  project_id?: string;
-  status?: TimesheetEntry['status'];
-  date_from?: string;
-  date_to?: string;
-  page?: number;
-  per_page?: number;
-}
-
-export interface LogTimeData {
-  project_id: string;
-  date: string;
-  hours: number;
-  description?: string;
+  title: string;
+  status: string;
+  assigned_to: string | null;
 }
 
 export interface Project {
   id: string;
   name: string;
-  code: string;
-  client: string | null;
-  status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
-  start_date: string;
-  end_date: string | null;
+  code: string | null;
+  status: string;
+  tasks: ProjectTask[];
 }
 
-export interface TimesheetStats {
-  total_hours_this_week: number;
-  total_hours_this_month: number;
-  pending_approvals: number;
-  active_projects: number;
-  hours_by_project: Array<{
-    project_id: string;
-    project_name: string;
-    hours: number;
-  }>;
+export interface TimeEntry {
+  id: string;
+  date: string;
+  hours: string | number;
+  description: string;
+  status: TimeEntryStatus;
+  rejection_reason: string | null;
+  approved_at: string | null;
+  project: { id: string; name: string; code: string | null } | null;
+  task: { id: string; title: string } | null;
+  approver: { name: string } | null;
+  employee?: {
+    first_name: string;
+    last_name: string;
+    matricule: string;
+    department?: { name: string } | null;
+  } | null;
 }
 
-export interface PaginatedTimesheets {
-  data: TimesheetEntry[];
-  meta?: {
-    current_page: number;
-    from: number | null;
-    last_page: number;
-    per_page: number;
-    to: number | null;
-    total: number;
-  };
+export interface TimeEntryPage {
+  data: TimeEntry[];
+  current_page: number;
+  last_page: number;
+  total: number;
 }
-
-// ---------------------------------------------------------------------------
-// Service
-// ---------------------------------------------------------------------------
-
-const BASE = '/timesheets';
 
 export const timesheetService = {
-  /** List timesheet entries with optional filters & pagination. */
-  getTimesheets(filters?: TimesheetFilters) {
-    return apiClient.get<PaginatedTimesheets>(BASE, filters);
+  async projects(): Promise<Project[]> {
+    const res = await apiClient.get<{ data: Project[] }>('/projects');
+    return res.data;
   },
 
-  /** Log time for a project. */
-  logTime(data: LogTimeData) {
-    return apiClient.post<ApiResponse<TimesheetEntry>>(BASE, data);
+  myEntries(): Promise<TimeEntryPage> {
+    return apiClient.get<TimeEntryPage>('/timesheets/my-entries');
   },
 
-  /** Approve a submitted timesheet entry. */
-  approveTimesheet(id: string) {
-    return apiClient.put<ApiResponse<TimesheetEntry>>(
-      `${BASE}/${id}/approve`,
-      {},
-    );
+  teamEntries(params: { status?: TimeEntryStatus; page?: number } = {}): Promise<TimeEntryPage> {
+    return apiClient.get<TimeEntryPage>('/timesheets', params);
   },
 
-  /** Reject a submitted timesheet entry with a reason. */
-  rejectTimesheet(id: string, reason: string) {
-    return apiClient.put<ApiResponse<TimesheetEntry>>(`${BASE}/${id}/reject`, {
-      reason,
-    });
+  log(payload: { project_id: string; task_id?: string; date: string; hours: number; description: string }) {
+    return apiClient.post<{ data: TimeEntry }>('/timesheets/log', payload);
   },
 
-  /** List available projects. */
-  getProjects() {
-    return apiClient.get<ApiResponse<Project[]>>('/projects');
-  },
-
-  /** Aggregate timesheet statistics. */
-  getTimesheetStats() {
-    return apiClient.get<ApiResponse<TimesheetStats>>(`${BASE}/stats`);
+  review(id: string, action: 'APPROVE' | 'REJECT', reason?: string) {
+    return apiClient.post<{ message: string }>(`/timesheets/${id}/review`, { action, reason });
   },
 };
