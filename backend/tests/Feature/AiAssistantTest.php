@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\AiConversation;
 use App\Models\Organization;
+use App\Models\Permission;
+use App\Models\Role;
+use App\Services\AiUnavailableException;
 use App\Models\User;
 use App\Services\AiAssistantService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -38,6 +41,14 @@ class AiAssistantTest extends TestCase
             'password' => bcrypt('password'),
             'is_active' => true,
         ]);
+
+        $perm = Permission::create(['id' => (string) Str::uuid(), 'name' => 'IA', 'slug' => 'ai.use', 'module' => 'ai']);
+        $role = Role::create(['id' => (string) Str::uuid(), 'organization_id' => $this->org->id, 'name' => 'RH', 'slug' => 'rh']);
+        $role->permissions()->attach($perm->id);
+        $this->user->roles()->attach($role->id);
+
+        // Par défaut : pas de clé → mode démonstration (aucun appel réseau en test)
+        config(['services.anthropic.key' => null]);
     }
 
     public function test_can_generate_document_draft_with_ai(): void
@@ -84,5 +95,59 @@ class AiAssistantTest extends TestCase
             'role' => 'assistant',
         ]);
     }
-}
 
+    public function test_ai_requires_permission_and_reports_demo_mode(): void
+    {
+        $other = User::create(['id' => (string) Str::uuid(), 'organization_id' => $this->org->id, 'name' => 'Sans IA', 'email' => 'noai@ntemo.local', 'password' => bcrypt('p'), 'is_active' => true]);
+        $this->actingAs($other, 'sanctum')->getJson('/api/v1/ai/status')->assertStatus(403);
+
+        $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/ai/status')
+            ->assertOk()->assertJsonPath('data.enabled', false)->assertJsonPath('data.task_types.DRAFT_LETTER', 'Courrier administratif');
+    }
+
+    public function test_enabled_mode_sends_alternating_history_and_records_usage(): void
+    {
+        config(['services.anthropic.key' => 'test-key']);
+        $fake = new class extends AiAssistantService {
+            public array $calls = [];
+
+            protected function complete(\App\Models\User $user, array $messages): array
+            {
+                $this->calls[] = $messages;
+
+                return ['text' => 'Réponse ' . count($this->calls), 'usage' => ['input_tokens' => 120, 'output_tokens' => 30]];
+            }
+        };
+        $this->app->instance(AiAssistantService::class, $fake);
+
+        $conv = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/v1/ai/conversations', ['title' => 'Courrier'])->json('data.id');
+
+        $this->actingAs($this->user, 'sanctum')
+            ->postJson("/api/v1/ai/conversations/{$conv}/messages", ['message' => 'Bonjour'])
+            ->assertOk()->assertJsonPath('data.source', 'claude')->assertJsonPath('data.assistant_message.content', 'Réponse 1');
+        $this->actingAs($this->user, 'sanctum')
+            ->postJson("/api/v1/ai/conversations/{$conv}/messages", ['message' => 'Rédige un courrier'])
+            ->assertOk();
+
+        // Le second appel reçoit l'historique complet, en alternance stricte
+        $this->assertSame(['user', 'assistant', 'user'], array_column($fake->calls[1], 'role'));
+        $this->assertSame('Rédige un courrier', $fake->calls[1][2]['content']);
+        $this->assertDatabaseHas('ai_messages', ['content' => 'Réponse 2', 'role' => 'assistant']);
+    }
+
+    public function test_ai_errors_are_reported_without_500(): void
+    {
+        config(['services.anthropic.key' => 'test-key']);
+        $this->app->instance(AiAssistantService::class, new class extends AiAssistantService {
+            protected function complete(\App\Models\User $user, array $messages): array
+            {
+                throw new AiUnavailableException('L\'assistant IA est très sollicité. Réessayez dans quelques instants.', 429);
+            }
+        });
+
+        $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/v1/ai/tasks/draft', ['task_type' => 'DRAFT_LETTER', 'prompt' => 'Courrier de bienvenue'])
+            ->assertStatus(429)->assertJsonPath('message', 'L\'assistant IA est très sollicité. Réessayez dans quelques instants.');
+    }
+}

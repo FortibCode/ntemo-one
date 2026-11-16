@@ -29,6 +29,8 @@ class LeaveWorkflowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Horloge figée : les dates de demande ci-dessous doivent rester dans le futur
+        Carbon::setTestNow(Carbon::parse('2026-11-02 09:00:00'));
 
         $this->org = Organization::create([
             'id' => (string) Str::uuid(),
@@ -137,6 +139,17 @@ class LeaveWorkflowTest extends TestCase
             'remaining_days' => 21.0,
         ]);
 
+        // La demande apparaît dans la file du N+1, pas encore dans celle de la RH
+        $this->actingAs($this->managerUser, 'sanctum')->getJson('/api/v1/leaves/pending')
+            ->assertOk()->assertJsonPath('data.0.id', $requestId)->assertJsonPath('data.0.review_level', 'N1');
+        $this->actingAs($this->employeeUser, 'sanctum')->getJson('/api/v1/leaves/pending')
+            ->assertOk()->assertJsonCount(0, 'data');
+
+        // Calendrier partagé : l'absence est visible, sans le motif
+        $calendar = $this->actingAs($this->employeeUser, 'sanctum')->getJson('/api/v1/leaves/calendar?month=2026-11')
+            ->assertOk()->assertJsonPath('data.0.start_date', '2026-11-09')->json('data.0');
+        $this->assertArrayNotHasKey('reason', $calendar);
+
         // 2. Approbation par le Manager N+1
         $n1Response = $this->actingAs($this->managerUser, 'sanctum')
             ->postJson("/api/v1/leaves/requests/{$requestId}/review-n1", [
@@ -148,6 +161,9 @@ class LeaveWorkflowTest extends TestCase
             ->assertJsonPath('data.status', 'PENDING_HR');
 
         // 3. Approbation finale par le Directeur RH
+        $this->actingAs($this->hrUser, 'sanctum')->getJson('/api/v1/leaves/pending')
+            ->assertOk()->assertJsonPath('data.0.review_level', 'HR');
+
         $hrResponse = $this->actingAs($this->hrUser, 'sanctum')
             ->postJson("/api/v1/leaves/requests/{$requestId}/review-hr", [
                 'approved' => true,

@@ -4,17 +4,24 @@ import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
+import { hasPermission, useAuth } from "@/context/AuthContext";
 
 const navItems = [
   { label: "Tableau de Bord", href: "/", icon: "📊" },
   { label: "Collaborateurs & RH", href: "/employees", icon: "👥" },
   { label: "Pointage & Présences (15s)", href: "/attendance", icon: "⏱️" },
-  { label: "Validation des Congés", href: "/leaves", icon: "🏖️" },
+  { label: "Congés & Absences", href: "/leaves", icon: "🏖️" },
   { label: "Badges Numériques", href: "/badges", icon: "🪪" },
   { label: "Moteur Documentaire", href: "/documents", icon: "📄" },
-  { label: "Projets & Feuilles de Temps", href: "/timesheets", icon: "📈" },
+  { label: "Projets & Tâches", href: "/projects", icon: "📈" },
+  { label: "Feuilles de Temps", href: "/timesheets", icon: "🕒" },
   { label: "Assistant IA NTEMO AI", href: "/ai-assistant", icon: "🤖" },
+];
+
+const adminNavItems = [
+  { label: "Rôles & Permissions", href: "/roles", icon: "🔐", permission: "roles.manage" },
+  { label: "Journal d'audit", href: "/audit", icon: "🧾", permission: "audit.view" },
+  { label: "Paramètres & Système", href: "/settings", icon: "⚙️" },
 ];
 
 export default function AdminSidebar() {
@@ -55,6 +62,29 @@ export default function AdminSidebar() {
           Modules Métier
         </div>
         {navItems.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                isActive
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-500/20 font-semibold"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <span className="text-base">{item.icon}</span>
+              <span className="truncate">{item.label}</span>
+            </Link>
+          );
+        })}
+
+        <div className="pt-3 px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+          Administration
+        </div>
+        {adminNavItems
+          .filter((item) => !item.permission || hasPermission(user, item.permission))
+          .map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link

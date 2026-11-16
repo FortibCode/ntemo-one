@@ -10,6 +10,13 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProjectTimesheetController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\AiAssistantController;
+use App\Http\Controllers\Api\V1\SettingsController;
+use App\Http\Controllers\Api\V1\RoleController;
+use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\ProjectController;
+use App\Http\Controllers\Api\V1\EmployeeDocumentController;
+use App\Http\Controllers\Api\V1\AuditLogController;
+use App\Http\Controllers\Api\V1\HrAdminController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -32,29 +39,61 @@ Route::prefix('v1')->group(function () {
         // Routes restreintes par organisation active
         Route::middleware(EnsureBelongsToOrganization::class)->group(function () {
             // Module Tableau de Bord & Indicateurs
-            Route::get('/dashboard/kpis', [DashboardController::class, 'kpis']);
+            Route::get('/dashboard/kpis', [DashboardController::class, 'kpis'])
+                ->middleware(EnsureUserHasPermission::class . ':dashboard.view');
 
             // Module Employés
             Route::apiResource('employees', EmployeeController::class);
 
+            // Structure, contrats et comptes de connexion
+            Route::get('/structure', [HrAdminController::class, 'structure']);
+            Route::post('/departments', [HrAdminController::class, 'storeDepartment']);
+            Route::post('/positions', [HrAdminController::class, 'storePosition']);
+            Route::get('/employees/{employeeId}/contracts', [HrAdminController::class, 'contracts']);
+            Route::post('/employees/{employeeId}/contracts', [HrAdminController::class, 'storeContract']);
+            Route::post('/employees/{employeeId}/account', [HrAdminController::class, 'createAccount']);
+
+            // GED : pièces du dossier collaborateur
+            Route::get('/employees/{employeeId}/documents', [EmployeeDocumentController::class, 'index']);
+            Route::post('/employees/{employeeId}/documents', [EmployeeDocumentController::class, 'store']);
+            Route::get('/employee-documents/{id}/download', [EmployeeDocumentController::class, 'download']);
+            Route::delete('/employee-documents/{id}', [EmployeeDocumentController::class, 'destroy']);
+
+            // Journal d'audit
+            Route::get('/audit-logs', [AuditLogController::class, 'index'])
+                ->middleware(EnsureUserHasPermission::class . ':audit.view');
+
             // Module Présences & Pointage QR Dynamique
-            Route::post('/attendance/qr-session', [AttendanceController::class, 'generateQrSession']);
             Route::post('/attendance/punch', [AttendanceController::class, 'punch']);
             Route::get('/attendance/my-records', [AttendanceController::class, 'myAttendances']);
-            Route::get('/attendance/corrections', [AttendanceController::class, 'corrections']);
             Route::post('/attendance/corrections', [AttendanceController::class, 'requestCorrection']);
-            Route::post('/attendance/corrections/{id}/review', [AttendanceController::class, 'reviewCorrection']);
+
+            // Borne de pointage : seuls les comptes terminaux / RH génèrent des QR (anti-fraude)
+            Route::middleware(EnsureUserHasPermission::class . ':attendance.scan_device')->group(function () {
+                Route::get('/attendance/devices', [AttendanceController::class, 'devices']);
+                Route::post('/attendance/qr-session', [AttendanceController::class, 'generateQrSession']);
+            });
+
+            // Traitement des régularisations
+            Route::middleware(EnsureUserHasPermission::class . ':attendance.approve_correction')->group(function () {
+                Route::get('/attendance/corrections', [AttendanceController::class, 'corrections']);
+                Route::post('/attendance/corrections/{id}/review', [AttendanceController::class, 'reviewCorrection']);
+            });
 
             // Module Badges Virtuels & Contrôle
             Route::get('/badges', [BadgeController::class, 'index']);
             Route::get('/badges/my-badge', [BadgeController::class, 'myVirtualBadge']);
             Route::post('/badges/issue', [BadgeController::class, 'issue']);
             Route::post('/badges/{badge}/revoke', [BadgeController::class, 'revoke']);
+            Route::get('/badges/{badge}/print', [BadgeController::class, 'print']);
             Route::post('/badges/verify', [BadgeController::class, 'verify']);
 
             // Module Congés & Approbations
             Route::get('/leaves/types', [LeaveController::class, 'types']);
             Route::get('/leaves/my-requests', [LeaveController::class, 'index']);
+            Route::get('/leaves/pending', [LeaveController::class, 'pending']);
+            Route::get('/leaves/balances', [LeaveController::class, 'balances']);
+            Route::get('/leaves/calendar', [LeaveController::class, 'calendar']);
             Route::post('/leaves/requests', [LeaveController::class, 'store']);
             Route::post('/leaves/requests/{id}/review-n1', [LeaveController::class, 'reviewByManager']);
             Route::post('/leaves/requests/{id}/review-hr', [LeaveController::class, 'reviewByHr']);
@@ -63,6 +102,11 @@ Route::prefix('v1')->group(function () {
             Route::get('/documents/templates', [DocumentEngineController::class, 'templates']);
             Route::post('/documents/generate', [DocumentEngineController::class, 'generate']);
             Route::get('/documents/download/{id}', [DocumentEngineController::class, 'download']);
+            Route::get('/documents/generations', [DocumentEngineController::class, 'generations']);
+
+            // Rapports Excel (bilans mensuels)
+            Route::get('/reports/attendance/monthly', [ReportController::class, 'monthlyAttendance'])
+                ->middleware(EnsureUserHasPermission::class . ':attendance.manage_all');
 
             // Module Notifications & Alertes
             Route::get('/notifications', [NotificationController::class, 'index']);
@@ -70,17 +114,47 @@ Route::prefix('v1')->group(function () {
             Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 
             // Module Projets, Tâches et Feuilles de temps
-            Route::get('/projects', [ProjectTimesheetController::class, 'projects']);
+            Route::get('/projects', [ProjectController::class, 'index']);
+            Route::post('/projects', [ProjectController::class, 'store']);
+            Route::get('/projects/{id}', [ProjectController::class, 'show']);
+            Route::put('/projects/{id}', [ProjectController::class, 'update']);
+            Route::get('/projects/{id}/report', [ProjectController::class, 'report']);
+            Route::post('/projects/{id}/tasks', [ProjectController::class, 'storeTask']);
+            Route::get('/tasks/mine', [ProjectController::class, 'myTasks']);
+            Route::put('/tasks/{id}', [ProjectController::class, 'updateTask']);
+            Route::delete('/tasks/{id}', [ProjectController::class, 'destroyTask']);
             Route::get('/timesheets', [ProjectTimesheetController::class, 'index']);
             Route::get('/timesheets/my-entries', [ProjectTimesheetController::class, 'myTimeEntries']);
             Route::post('/timesheets/log', [ProjectTimesheetController::class, 'storeTimeEntry']);
             Route::post('/timesheets/{id}/review', [ProjectTimesheetController::class, 'reviewTimeEntry']);
 
             // Module Assistant IA pour les Tâches Documentaires Autorêmes
-            Route::get('/ai/conversations', [AiAssistantController::class, 'conversations']);
-            Route::post('/ai/conversations', [AiAssistantController::class, 'createConversation']);
-            Route::post('/ai/conversations/{id}/messages', [AiAssistantController::class, 'sendMessage']);
-            Route::post('/ai/tasks/draft', [AiAssistantController::class, 'generateDraft']);
+            Route::middleware(EnsureUserHasPermission::class . ':ai.use')->group(function () {
+                Route::get('/ai/status', [AiAssistantController::class, 'status']);
+                Route::get('/ai/conversations', [AiAssistantController::class, 'conversations']);
+                Route::post('/ai/conversations', [AiAssistantController::class, 'createConversation']);
+                Route::post('/ai/conversations/{id}/messages', [AiAssistantController::class, 'sendMessage']);
+                Route::post('/ai/tasks/draft', [AiAssistantController::class, 'generateDraft']);
+            });
+
+            // Module Paramètres Organisation (lecture ouverte, écriture restreinte)
+            Route::get('/settings', [SettingsController::class, 'index']);
+            Route::get('/settings/attendance', [SettingsController::class, 'getAttendanceConfig']);
+            Route::middleware(EnsureUserHasPermission::class . ':settings.manage')->group(function () {
+                Route::put('/settings', [SettingsController::class, 'update']);
+                Route::put('/settings/attendance', [SettingsController::class, 'updateAttendanceConfig']);
+            });
+
+            // Module Rôles & Permissions (réservé aux administrateurs)
+            Route::middleware(EnsureUserHasPermission::class . ':roles.manage')->group(function () {
+                Route::get('/permissions', [RoleController::class, 'permissions']);
+                Route::get('/roles', [RoleController::class, 'index']);
+                Route::get('/roles/users', [RoleController::class, 'users']);
+                Route::post('/roles/assign', [RoleController::class, 'assignRole']);
+                Route::post('/roles/revoke', [RoleController::class, 'revokeRole']);
+                Route::get('/roles/{id}', [RoleController::class, 'show']);
+                Route::get('/roles/{id}/permissions', [RoleController::class, 'getRolePermissions']);
+            });
         });
     });
 });

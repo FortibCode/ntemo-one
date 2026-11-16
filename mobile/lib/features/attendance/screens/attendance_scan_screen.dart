@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:ntemo_one_mobile/core/api/api_client.dart';
+import 'package:ntemo_one_mobile/core/constants/app_constants.dart';
+import 'package:ntemo_one_mobile/features/attendance/screens/qr_scanner_screen.dart';
+import 'package:ntemo_one_mobile/features/attendance/widgets/attendance_history.dart';
 import 'package:ntemo_one_mobile/features/attendance/services/attendance_service.dart';
 
 class AttendanceScanScreen extends StatefulWidget {
@@ -18,6 +21,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
   String? _successMessage;
   String? _errorMessage;
   String _punchType = 'IN'; // IN, OUT
+  int _historyVersion = 0; // incrémenté après un pointage pour recharger l'historique
 
   @override
   void initState() {
@@ -41,15 +45,18 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
     });
 
     try {
-      final result = await _attendanceService.punch(
+      await _attendanceService.punch(
         qrToken: rawToken.trim(),
         type: _punchType,
         deviceMeta: 'Flutter Mobile Scanner (Android/iOS)',
       );
 
       if (!mounted) return;
+      final now = TimeOfDay.now();
+      final time = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
       setState(() {
-        _successMessage = "Pointage validé avec succès (${_punchType == 'IN' ? 'Entrée' : 'Sortie'}) à ${DateTime.now().toIso8601String().substring(11, 16)} !";
+        _historyVersion++;
+        _successMessage = "Pointage validé avec succès (${_punchType == 'IN' ? 'Entrée' : 'Sortie'}) à $time !";
         _manualTokenController.clear();
       });
     } catch (e) {
@@ -66,6 +73,14 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
     }
   }
 
+  Future<void> _openScanner() async {
+    final token = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrScannerScreen(), fullscreenDialog: true),
+    );
+    if (!mounted || token == null) return;
+    await _submitPunch(token);
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -77,18 +92,18 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.indigo.shade50,
+              color: Colors.lightBlue.shade50,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.indigo.shade100),
+              border: Border.all(color: Colors.lightBlue.shade100),
             ),
-            child: Row(
+            child: const Row(
               children: [
-                const Icon(Icons.security, color: Color(0xFF4F46E5), size: 32),
-                const SizedBox(width: 16),
+                Icon(Icons.security, color: AppColors.primary, size: 32),
+                SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text(
                         'Pointage Sécurisé 15s',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -128,67 +143,65 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Scanner visuel simulé / interactif
-          Center(
-            child: Container(
-              height: 220,
-              width: 220,
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFF4F46E5), width: 3),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  const Icon(Icons.qr_code_scanner, color: Colors.white38, size: 100),
-                  Positioned(
-                    bottom: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'Alignez le QR code dynamique',
-                        style: TextStyle(color: Colors.white, fontSize: 11),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Champ de saisie ou scan direct
-          TextField(
-            controller: _manualTokenController,
-            decoration: InputDecoration(
-              labelText: 'Jeton ou Token QR Scanné',
-              hintText: 'Collez le token ou scannez le QR code...',
-              prefixIcon: const Icon(Icons.qr_code),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          const SizedBox(height: 16),
-
+          // Scan caméra du QR dynamique de la borne
           FilledButton.icon(
-            onPressed: _isLoading
-                ? null
-                : () => _submitPunch(_manualTokenController.text),
+            key: const Key('attendance-scan'),
+            onPressed: _isLoading ? null : _openScanner,
             icon: _isLoading
                 ? const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Icon(Icons.fingerprint),
-            label: Text(_isLoading ? 'Validation serveur...' : 'Valider le Pointage'),
+                : const Icon(Icons.qr_code_scanner, size: 28),
+            label: Text(
+              _isLoading ? 'Validation serveur...' : 'Scanner le QR code',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
             style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(vertical: 22),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Le QR code de la borne est valable ${AppConstants.qrTtlSeconds} secondes et ne peut être utilisé qu’une fois.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+          const SizedBox(height: 16),
+
+          // Saisie manuelle de secours (caméra indisponible)
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Saisie manuelle du jeton', style: TextStyle(fontSize: 14)),
+              subtitle: const Text('En cas de caméra indisponible', style: TextStyle(fontSize: 12)),
+              children: [
+                TextField(
+                  controller: _manualTokenController,
+                  decoration: InputDecoration(
+                    labelText: 'Jeton QR',
+                    hintText: 'Collez le jeton affiché sur la borne...',
+                    prefixIcon: const Icon(Icons.qr_code),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading ? null : () => _submitPunch(_manualTokenController.text),
+                    icon: const Icon(Icons.fingerprint),
+                    label: const Text('Valider le pointage'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -239,6 +252,8 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 32),
+          AttendanceHistory(key: ValueKey(_historyVersion), service: _attendanceService),
         ],
       ),
     );

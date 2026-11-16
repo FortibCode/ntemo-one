@@ -7,6 +7,7 @@ use App\Models\DocumentTemplate;
 use App\Models\DocumentTemplateVersion;
 use App\Models\Employee;
 use App\Models\User;
+use App\Services\Documents\DocumentRenderer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -15,6 +16,10 @@ use InvalidArgumentException;
 
 class DocumentEngineService
 {
+    public function __construct(
+        protected DocumentRenderer $renderer
+    ) {}
+
     /**
      * Crée une nouvelle version pour un modèle documentaire.
      */
@@ -44,16 +49,13 @@ class DocumentEngineService
     }
 
     /**
-     * Compile et fusionne le modèle avec les variables réelles.
+     * Compile et fusionne le modèle avec les variables réelles (valeurs échappées).
+     *
+     * @throws \App\Services\Documents\MissingVariablesException
      */
     public function renderContent(string $templateContent, array $variables): string
     {
-        $rendered = $templateContent;
-        foreach ($variables as $key => $value) {
-            $valString = is_scalar($value) ? (string) $value : json_encode($value);
-            $rendered = str_replace('{{' . $key . '}}', $valString, $rendered);
-        }
-        return $rendered;
+        return $this->renderer->merge($templateContent, $variables);
     }
 
     /**
@@ -102,6 +104,14 @@ class DocumentEngineService
         $variables = $employee ? $this->buildEmployeeContext($employee) : [];
         $variables = array_merge($variables, $extraVariables);
 
+        $format = strtoupper($template->output_format);
+        if (!in_array($format, DocumentRenderer::SUPPORTED_FORMATS, true)) {
+            throw new InvalidArgumentException("Format « {$format} » non pris en charge pour les modèles (PDF, DOCX ou PPTX).");
+        }
+
+        // Fusion avant toute écriture : une variable manquante refuse la génération
+        $compiledHtml = $this->renderContent($version->content, $variables);
+
         // Titre documentaire
         $docTitle = "{$template->title} - " . ($employee ? $employee->matricule : 'Global') . " - " . Carbon::now()->format('YmdHis');
 
@@ -113,17 +123,21 @@ class DocumentEngineService
             'employee_id' => $employee?->id,
             'requested_by' => $requester->id,
             'title' => $docTitle,
-            'output_format' => $template->output_format,
+            'output_format' => $format,
             'status' => 'PROCESSING',
             'input_payload' => $variables,
         ]);
 
         try {
-            // Fusion du contenu
-            $compiledContent = $this->renderContent($version->content, $variables);
+            // Rendu du fichier réel (PDF / DOCX) avec en-tête et référence de traçabilité
+            $compiledContent = $this->renderer->render($format, $compiledHtml, [
+                'title' => $template->title,
+                'reference' => strtoupper(substr($generation->id, 0, 8)),
+                'organization' => $organization->name,
+            ]);
 
             // Stockage privé sécurisé
-            $extension = strtolower($template->output_format);
+            $extension = strtolower($format);
             $fileName = "documents/{$organization->id}/{$generation->id}.{$extension}";
             
             Storage::disk('local')->put($fileName, $compiledContent);

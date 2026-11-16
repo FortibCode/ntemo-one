@@ -9,6 +9,8 @@ use App\Models\User;
 use App\Models\Department;
 use App\Models\Position;
 use App\Models\Employee;
+use App\Models\AttendanceDevice;
+use App\Models\LeaveType;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -82,6 +84,11 @@ class DatabaseSeeder extends Seeder
             // Audit & IA
             ['name' => 'Consulter les journaux d\'audit', 'slug' => 'audit.view', 'module' => 'audit'],
             ['name' => 'Utiliser assistant IA', 'slug' => 'ai.use', 'module' => 'ai'],
+
+            // Administration
+            ['name' => 'Modifier les paramètres de l\'organisation', 'slug' => 'settings.manage', 'module' => 'administration'],
+            ['name' => 'Gérer les rôles et leur attribution', 'slug' => 'roles.manage', 'module' => 'administration'],
+            ['name' => 'Consulter le tableau de bord de pilotage', 'slug' => 'dashboard.view', 'module' => 'dashboard'],
         ];
 
         $permissionModels = [];
@@ -152,7 +159,7 @@ class DatabaseSeeder extends Seeder
         $roleSuperAdmin->permissions()->sync($allPermissions->pluck('id'));
         $roleDirection->permissions()->sync($allPermissions->pluck('id'));
 
-        $rhPerms = $allPermissions->filter(fn($p) => in_array($p->module, ['employees', 'structure', 'contracts', 'documents', 'attendance', 'badges', 'leaves', 'ai']));
+        $rhPerms = $allPermissions->filter(fn($p) => in_array($p->module, ['employees', 'structure', 'contracts', 'documents', 'attendance', 'badges', 'leaves', 'ai', 'dashboard']));
         $roleRH->permissions()->sync($rhPerms->pluck('id'));
 
         $managerPerms = $allPermissions->filter(fn($p) => in_array($p->slug, [
@@ -259,7 +266,7 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($usersConfig as $cfg) {
-            $user = User::updateOrCreate(
+            $user = User::firstOrCreate(
                 ['email' => $cfg['email']],
                 [
                     'id' => (string) Str::uuid(),
@@ -272,7 +279,7 @@ class DatabaseSeeder extends Seeder
 
             $user->roles()->sync([$cfg['role']->id]);
 
-            Employee::updateOrCreate(
+            Employee::firstOrCreate(
                 ['user_id' => $user->id],
                 [
                     'id' => (string) Str::uuid(),
@@ -288,5 +295,48 @@ class DatabaseSeeder extends Seeder
                 ]
             );
         }
+
+        // 7. Borne de pointage d'accueil (QR dynamique 15 s)
+        AttendanceDevice::firstOrCreate(
+            ['device_identifier' => 'KIOSK-ENTREE-01'],
+            [
+                'id' => (string) Str::uuid(),
+                'organization_id' => $organization->id,
+                'name' => 'Borne Accueil — Entrée principale',
+                'secret_key' => Str::random(64),
+                'type' => 'WALL_KIOSK',
+                'is_active' => true,
+            ]
+        );
+
+        // 8. Types de congé (quotas surchargés par Paramètres → Congés)
+        foreach ([
+            ['code' => 'ANNUAL', 'name' => 'Congé annuel payé', 'days' => 30, 'paid' => true, 'n1' => true],
+            ['code' => 'SICK', 'name' => 'Congé maladie', 'days' => 15, 'paid' => true, 'n1' => false, 'attachment' => true],
+            ['code' => 'MATERNITY', 'name' => 'Congé maternité', 'days' => 90, 'paid' => true, 'n1' => false, 'attachment' => true],
+            ['code' => 'PATERNITY', 'name' => 'Congé paternité', 'days' => 10, 'paid' => true, 'n1' => true],
+            ['code' => 'EXCEPTIONAL', 'name' => 'Permission exceptionnelle (événement familial)', 'days' => 5, 'paid' => true, 'n1' => true],
+            ['code' => 'UNPAID', 'name' => 'Congé sans solde', 'days' => 0, 'paid' => false, 'n1' => true],
+        ] as $type) {
+            LeaveType::firstOrCreate(
+                ['organization_id' => $organization->id, 'code' => $type['code']],
+                [
+                    'id' => (string) Str::uuid(),
+                    'name' => $type['name'],
+                    'default_days_per_year' => $type['days'],
+                    'is_paid' => $type['paid'],
+                    'requires_attachment' => $type['attachment'] ?? false,
+                    'requires_manager_approval' => $type['n1'],
+                    'requires_hr_approval' => true,
+                    'is_active' => true,
+                ]
+            );
+        }
+
+        // 9. Modèles documentaires officiels
+        $this->callWith(DocumentTemplateSeeder::class, ['organization' => $organization]);
+
+        // 10. Projets et tâches de démonstration
+        $this->callWith(DemoProjectSeeder::class, ['organization' => $organization]);
     }
 }

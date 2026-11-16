@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\AiConversation;
 use App\Services\AiAssistantService;
+use App\Services\AiUnavailableException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -15,6 +16,21 @@ class AiAssistantController extends Controller
     public function __construct(
         protected AiAssistantService $aiService
     ) {}
+
+    /**
+     * État de l'assistant (activé ou mode démonstration).
+     */
+    public function status(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'enabled' => $this->aiService->isConfigured(),
+                'model' => $this->aiService->isConfigured() ? config('services.anthropic.model') : null,
+                'task_types' => AiAssistantService::TASK_TYPES,
+            ],
+        ]);
+    }
 
     /**
      * Démarrer ou lister les conversations de l'utilisateur.
@@ -58,14 +74,18 @@ class AiAssistantController extends Controller
     public function sendMessage(Request $request, string $id): JsonResponse
     {
         $request->validate([
-            'message' => ['required', 'string'],
+            'message' => ['required', 'string', 'max:8000'],
         ]);
 
         $conversation = AiConversation::where('id', $id)
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        $result = $this->aiService->sendMessage($conversation, $request->message);
+        try {
+            $result = $this->aiService->sendMessage($conversation, $request->message, $request->user());
+        } catch (AiUnavailableException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getCode() ?: 503);
+        }
 
         return response()->json([
             'success' => true,
@@ -79,17 +99,21 @@ class AiAssistantController extends Controller
     public function generateDraft(Request $request): JsonResponse
     {
         $request->validate([
-            'task_type' => ['required', 'string', 'in:DRAFT_JOB_DESCRIPTION,DRAFT_CONTRACT_CLAUSE,SUMMARIZE_REPORT'],
-            'prompt' => ['required', 'string', 'max:1000'],
+            'task_type' => ['required', 'string', 'in:' . implode(',', array_keys(AiAssistantService::TASK_TYPES))],
+            'prompt' => ['required', 'string', 'max:20000'],
         ]);
 
         $user = $request->user();
-        $task = $this->aiService->generateDocumentDraft(
-            $user,
-            $request->task_type,
-            $request->prompt,
-            ['organization_name' => $user->organization?->name]
-        );
+        try {
+            $task = $this->aiService->generateDocumentDraft(
+                $user,
+                $request->task_type,
+                $request->prompt,
+                ['organization_name' => $user->organization?->name]
+            );
+        } catch (AiUnavailableException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getCode() ?: 503);
+        }
 
         return response()->json([
             'success' => true,

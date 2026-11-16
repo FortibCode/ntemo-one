@@ -41,7 +41,7 @@ class DocumentEngineTest extends TestCase
         $permDoc = Permission::create([
             'id' => (string) Str::uuid(),
             'name' => 'Generate Docs',
-            'slug' => 'docs.generate',
+            'slug' => 'documents.generate',
             'module' => 'documents',
         ]);
 
@@ -129,10 +129,87 @@ class DocumentEngineTest extends TestCase
         $filePath = $response->json('data.file_path');
         Storage::disk('local')->assertExists($filePath);
 
+        // Vrai fichier PDF (et non du texte renommé en .pdf)
         $savedContent = Storage::disk('local')->get($filePath);
-        $this->assertStringContainsString('Sylvie Makosso', $savedContent);
-        $this->assertStringContainsString('NTM-2026-0044', $savedContent);
-        $this->assertStringContainsString('NTEMO Docs Org', $savedContent);
+        $this->assertStringStartsWith('%PDF-', $savedContent);
+        $this->assertSame($sha256, hash('sha256', $savedContent));
+        $this->assertStringEndsWith('.pdf', $filePath);
+
+        // Le contenu fusionné contient bien les données du collaborateur
+        $merged = $this->documentEngineService->renderContent(
+            $this->template->currentVersion->content,
+            $this->documentEngineService->buildEmployeeContext($this->employee)
+        );
+        $this->assertStringContainsString('Sylvie Makosso', $merged);
+        $this->assertStringContainsString('NTM-2026-0044', $merged);
+        $this->assertStringContainsString('NTEMO Docs Org', $merged);
+
+        // Téléchargement
+        $this->actingAs($this->hrUser, 'sanctum')
+            ->get("/api/v1/documents/download/{$docId}")
+            ->assertOk();
+    }
+
+    public function test_generates_a_real_docx_word_file(): void
+    {
+        $this->template->update(['output_format' => 'DOCX']);
+
+        $response = $this->actingAs($this->hrUser, 'sanctum')
+            ->postJson('/api/v1/documents/generate', [
+                'template_id' => $this->template->id,
+                'employee_id' => $this->employee->id,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.output_format', 'DOCX');
+
+        $path = Storage::disk('local')->path($response->json('data.file_path'));
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($path) === true, 'Le fichier .docx doit être une archive Office valide');
+        $documentXml = $zip->getFromName('word/document.xml');
+        $zip->close();
+
+        $this->assertStringContainsString('Sylvie Makosso', $documentXml);
+        $this->assertStringContainsString('NTM-2026-0044', $documentXml);
+    }
+
+    public function test_missing_variables_are_reported_and_nothing_is_generated(): void
+    {
+        $this->documentEngineService->createTemplateVersion(
+            $this->template,
+            '<p>Mission à {{mission.destination}} pour {{employee.full_name}}</p>',
+            'v2.0',
+            $this->hrUser
+        );
+
+        $this->actingAs($this->hrUser, 'sanctum')
+            ->postJson('/api/v1/documents/generate', [
+                'template_id' => $this->template->id,
+                'employee_id' => $this->employee->id,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'MISSING_VARIABLES')
+            ->assertJsonPath('missing_variables', ['mission.destination']);
+
+        $this->assertDatabaseCount('document_generations', 0);
+
+        $this->actingAs($this->hrUser, 'sanctum')
+            ->postJson('/api/v1/documents/generate', [
+                'template_id' => $this->template->id,
+                'employee_id' => $this->employee->id,
+                'extra_variables' => ['mission.destination' => 'Pointe-Noire'],
+            ])
+            ->assertCreated();
+    }
+
+    public function test_variable_values_are_html_escaped(): void
+    {
+        $html = $this->documentEngineService->renderContent(
+            '<p>{{ employee.full_name }}</p>',
+            ['employee.full_name' => '<script>alert(1)</script>']
+        );
+
+        $this->assertStringNotContainsString('<script>', $html);
+        $this->assertStringContainsString('&lt;script&gt;', $html);
     }
 
     public function test_unauthorized_user_cannot_generate_documents(): void
@@ -154,5 +231,32 @@ class DocumentEngineTest extends TestCase
 
         $response->assertStatus(403);
     }
-}
 
+    public function test_generates_a_real_pptx_presentation_from_html_sections(): void
+    {
+        $this->template->update(['output_format' => 'PPTX']);
+        $this->documentEngineService->createTemplateVersion(
+            $this->template,
+            '<h1>Présentation {{employee.full_name}}</h1><p>Sous-titre</p><h2>Contexte</h2><p>Premier point</p>'
+                . '<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table><h2>Suite</h2><ul><li>X</li><li>Y</li></ul>',
+            'v3.0',
+            $this->hrUser
+        );
+
+        $path = $this->actingAs($this->hrUser, 'sanctum')
+            ->postJson('/api/v1/documents/generate', ['template_id' => $this->template->id, 'employee_id' => $this->employee->id])
+            ->assertCreated()->assertJsonPath('data.output_format', 'PPTX')
+            ->json('data.file_path');
+
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open(Storage::disk('local')->path($path)) === true);
+        $this->assertNotFalse($zip->getFromName('ppt/presentation.xml'));
+        // Titre + « Contexte » + tableau « Contexte (suite) » + « Suite »
+        $this->assertNotFalse($zip->getFromName('ppt/slides/slide4.xml'));
+        $this->assertFalse($zip->getFromName('ppt/slides/slide5.xml'));
+        $this->assertStringContainsString('Sylvie Makosso', $zip->getFromName('ppt/slides/slide1.xml'));
+        $this->assertStringContainsString('Contexte (suite)', $zip->getFromName('ppt/slides/slide3.xml'));
+        $this->assertNotFalse($zip->getFromName('ppt/media/logo.png'));
+        $zip->close();
+    }
+}

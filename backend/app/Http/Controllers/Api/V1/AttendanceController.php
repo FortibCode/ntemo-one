@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
+use App\Services\Audit\AuditLogger;
+use App\Models\AttendanceCorrection;
 use App\Models\AttendanceDevice;
 use App\Models\AttendanceEvent;
 use App\Models\AttendanceDay;
@@ -10,6 +13,7 @@ use App\Services\AttendanceService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -32,11 +36,37 @@ class AttendanceController extends Controller
             ->where('organization_id', $request->user()->organization_id)
             ->firstOrFail();
 
-        $qrData = $this->attendanceService->generateDynamicQr($device);
+        try {
+            $qrData = $this->attendanceService->generateDynamicQr($device);
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        // Signal de vie de la borne (supervision)
+        $device->forceFill(['last_heartbeat_at' => Carbon::now()])->save();
 
         return response()->json([
             'success' => true,
-            'data' => $qrData,
+            'data' => $qrData + ['device' => ['name' => $device->name, 'identifier' => $device->device_identifier]],
+        ]);
+    }
+
+    /**
+     * Bornes de pointage actives de l'organisation (sélection sur l'écran borne).
+     */
+    public function devices(Request $request): JsonResponse
+    {
+        $devices = AttendanceDevice::where('organization_id', $request->user()->organization_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'device_identifier', 'type', 'last_heartbeat_at']);
+
+        return response()->json([
+            'success' => true,
+            'data' => $devices,
         ]);
     }
 
@@ -116,7 +146,7 @@ class AttendanceController extends Controller
      */
     public function corrections(Request $request): JsonResponse
     {
-        $query = \App\Models\AttendanceCorrection::where('organization_id', $request->user()->organization_id)
+        $query = AttendanceCorrection::where('organization_id', $request->user()->organization_id)
             ->with(['employee.department', 'reviewer'])
             ->latest('created_at');
 
@@ -124,7 +154,27 @@ class AttendanceController extends Controller
             $query->where('status', $request->status);
         }
 
-        return response()->json($query->paginate(25));
+        $page = $query->paginate(25);
+        $page->getCollection()->transform(fn (AttendanceCorrection $c) => [
+            'id' => $c->id,
+            'date' => $c->date?->toDateString(),
+            'requested_event_type' => $c->requested_event_type,
+            'requested_time' => substr((string) $c->requested_time, 0, 5),
+            'reason' => $c->reason,
+            'status' => $c->status,
+            'rejection_reason' => $c->rejection_reason,
+            'reviewed_at' => $c->reviewed_at?->toISOString(),
+            'reviewer_name' => $c->reviewer?->name,
+            'created_at' => $c->created_at?->toISOString(),
+            'employee' => [
+                'id' => $c->employee?->id,
+                'full_name' => $c->employee?->full_name,
+                'matricule' => $c->employee?->matricule,
+                'department' => $c->employee?->department?->name,
+            ],
+        ]);
+
+        return response()->json($page);
     }
 
     /**
@@ -147,7 +197,7 @@ class AttendanceController extends Controller
             ], Response::HTTP_FORBIDDEN);
         }
 
-        $correction = \App\Models\AttendanceCorrection::create([
+        $correction = AttendanceCorrection::create([
             'organization_id' => $request->user()->organization_id,
             'employee_id' => $employee->id,
             'date' => $request->date,
@@ -174,18 +224,43 @@ class AttendanceController extends Controller
             'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $correction = \App\Models\AttendanceCorrection::where('id', $id)
+        $correction = AttendanceCorrection::where('id', $id)
             ->where('organization_id', $request->user()->organization_id)
+            ->with('employee.organization')
             ->firstOrFail();
 
-        if ($request->action === 'APPROVE') {
-            $correction->update([
-                'status' => 'APPROVED_RH',
-                'reviewed_by' => $request->user()->id,
-                'reviewed_at' => Carbon::now(),
-            ]);
+        if ($correction->status !== 'PENDING') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cette demande a déjà été traitée.',
+                'error_code' => 'ALREADY_REVIEWED',
+            ], Response::HTTP_CONFLICT);
+        }
 
-            $message = 'Demande de régularisation approuvée avec succès.';
+        // Séparation des tâches : on ne valide jamais sa propre demande
+        if ($correction->employee?->user_id === $request->user()->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Vous ne pouvez pas traiter votre propre demande de régularisation.',
+                'error_code' => 'SELF_REVIEW_FORBIDDEN',
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        if ($request->action === 'APPROVE') {
+            DB::transaction(function () use ($correction, $request) {
+                $correction->update([
+                    'status' => 'APPROVED_RH',
+                    'reviewed_by' => $request->user()->id,
+                    'reviewed_at' => Carbon::now(),
+                ]);
+                $this->attendanceService->applyApprovedCorrection($correction, $correction->employee);
+            });
+
+            $message = 'Demande approuvée : le pointage a été régularisé.';
+            app(NotificationService::class)->notifyEmployee($correction->employee, 'CORRECTION_DECISION', 'Régularisation acceptée',
+                'Votre pointage du ' . $correction->date?->format('d/m/Y') . ' (' . substr((string) $correction->requested_time, 0, 5) . ') a été régularisé.',
+                ['correction_id' => $correction->id], $request->user());
+            app(AuditLogger::class)->record('attendance.correction_approved', $correction, ['date' => $correction->date?->toDateString(), 'type' => $correction->requested_event_type, 'time' => $correction->requested_time]);
         } else {
             $request->validate(['reason' => ['required', 'string']]);
             $correction->update([
@@ -196,6 +271,10 @@ class AttendanceController extends Controller
             ]);
 
             $message = 'Demande de régularisation rejetée.';
+            app(NotificationService::class)->notifyEmployee($correction->employee, 'CORRECTION_DECISION', 'Régularisation refusée',
+                'Votre demande pour le ' . $correction->date?->format('d/m/Y') . " a été refusée. Motif : {$request->reason}",
+                ['correction_id' => $correction->id], $request->user());
+            app(AuditLogger::class)->record('attendance.correction_rejected', $correction, ['reason' => $request->reason]);
         }
 
         return response()->json([

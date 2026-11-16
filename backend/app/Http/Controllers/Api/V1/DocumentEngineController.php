@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\DocumentTemplate;
 use App\Models\DocumentGeneration;
 use App\Models\Employee;
 use App\Services\DocumentEngineService;
+use App\Services\Documents\MissingVariablesException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -44,7 +46,7 @@ class DocumentEngineController extends Controller
         ]);
 
         $user = $request->user();
-        if (!$user->hasPermission('docs.generate')) {
+        if (!$user->hasPermission('documents.generate')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Permission insuffisante pour générer des documents administratifs.',
@@ -70,12 +72,28 @@ class DocumentEngineController extends Controller
                 ->firstOrFail();
         }
 
-        $generation = $this->documentEngineService->generateDocument(
-            $template->currentVersion,
-            $user,
-            $employee,
-            $request->input('extra_variables', [])
-        );
+        try {
+            $generation = $this->documentEngineService->generateDocument(
+                $template->currentVersion,
+                $user,
+                $employee,
+                $request->input('extra_variables', [])
+            );
+        } catch (MissingVariablesException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_code' => 'MISSING_VARIABLES',
+                'missing_variables' => $e->variables,
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        app(AuditLogger::class)->record('document.generated', $generation, ['title' => $generation->title, 'format' => $generation->output_format, 'sha256' => $generation->file_hash_sha256]);
 
         return response()->json([
             'success' => true,
@@ -104,7 +122,7 @@ class DocumentEngineController extends Controller
         // Contrôle d'accès : RH, demandeur ou employé concerné
         $isRequester = $generation->requested_by === $user->id;
         $isTargetEmployee = $user->employee && $generation->employee_id === $user->employee->id;
-        $hasDocPermission = $user->hasPermission('docs.generate') || $user->hasPermission('documents.read_confidential');
+        $hasDocPermission = $user->hasPermission('documents.generate') || $user->hasPermission('documents.read_confidential');
 
         if (!$isRequester && !$isTargetEmployee && !$hasDocPermission) {
             return response()->json([
@@ -120,10 +138,47 @@ class DocumentEngineController extends Controller
             ], Response::HTTP_NOT_FOUND);
         }
 
+        app(AuditLogger::class)->record('document.downloaded', $generation, ['title' => $generation->title]);
+
         return Storage::disk('local')->download(
             $generation->file_path,
             "{$generation->title}." . strtolower($generation->output_format)
         );
     }
-}
 
+    /**
+     * Historique des documents générés : tous pour la RH, sinon ceux demandés par / concernant l'utilisateur.
+     */
+    public function generations(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $query = DocumentGeneration::where('organization_id', $user->organization_id)
+            ->with(['templateVersion.template:id,title,code', 'employee:id,first_name,last_name,matricule', 'requester:id,name'])
+            ->latest('created_at');
+
+        if (!$user->hasPermission('documents.generate') && !$user->hasPermission('documents.read_confidential')) {
+            $employeeId = $user->employee?->id;
+            $query->where(fn ($q) => $q->where('requested_by', $user->id)
+                ->when($employeeId, fn ($q2) => $q2->orWhere('employee_id', $employeeId)));
+        }
+
+        $items = $query->limit(50)->get()->map(fn (DocumentGeneration $g) => [
+            'id' => $g->id,
+            'title' => $g->title,
+            'template' => $g->templateVersion?->template?->title,
+            'output_format' => $g->output_format,
+            'status' => $g->status,
+            'file_size_bytes' => $g->file_size_bytes,
+            'file_hash_sha256' => $g->file_hash_sha256,
+            'error_message' => $g->error_message,
+            'generated_at' => $g->generated_at?->toISOString(),
+            'employee' => $g->employee ? [
+                'full_name' => $g->employee->full_name,
+                'matricule' => $g->employee->matricule,
+            ] : null,
+            'requested_by' => $g->requester?->name,
+        ]);
+
+        return response()->json(['success' => true, 'data' => $items]);
+    }
+}

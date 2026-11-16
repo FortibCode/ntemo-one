@@ -1,526 +1,540 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import AdminSidebar from "@/components/layout/AdminSidebar";
+import { hasPermission, useAuth } from "@/context/AuthContext";
+import { apiClient, ApiError } from "@/lib/api";
+import { badgeService, type BadgeItem, type BadgeVerification } from "@/lib/services/badgeService";
 
-interface BadgeItem {
+interface EmployeeOption {
   id: string;
-  badge_number: string;
-  security_token: string;
-  status: "ACTIVE" | "REVOKED" | "REPLACED" | "EXPIRED";
-  issued_at: string;
-  expires_at: string | null;
-  revoked_at?: string | null;
-  revocation_reason?: string | null;
-  employee: {
-    matricule: string;
-    first_name: string;
-    last_name: string;
-    department?: { name: string } | null;
-    position?: { title: string } | null;
-  };
+  full_name: string;
+  matricule: string;
 }
 
-export default function BadgesAdminPage() {
-  const [badges, setBadges] = useState<BadgeItem[]>([
-    {
-      id: "b-001",
-      badge_number: "BDG-2026-00412",
-      security_token: "NTEMO-SEC-A99F-2026",
-      status: "ACTIVE",
-      issued_at: "2026-01-15",
-      expires_at: "2027-01-15",
-      employee: {
-        matricule: "NTM-2026-001",
-        first_name: "Jean",
-        last_name: "Mavoungou",
-        department: { name: "Direction Générale" },
-        position: { title: "Directeur des Opérations" },
-      },
-    },
-    {
-      id: "b-002",
-      badge_number: "BDG-2026-00874",
-      security_token: "NTEMO-SEC-C41B-2026",
-      status: "ACTIVE",
-      issued_at: "2026-02-01",
-      expires_at: "2027-02-01",
-      employee: {
-        matricule: "NTM-2026-002",
-        first_name: "Awa",
-        last_name: "Ndiaye",
-        department: { name: "Ressources Humaines" },
-        position: { title: "Responsable RH" },
-      },
-    },
-    {
-      id: "b-003",
-      badge_number: "BDG-2025-00109",
-      security_token: "NTEMO-SEC-OLD-8871",
-      status: "REVOKED",
-      issued_at: "2025-05-10",
-      expires_at: "2026-05-10",
-      revoked_at: "2026-01-10",
-      revocation_reason: "Perte déclarée du smartphone professionnel",
-      employee: {
-        matricule: "NTM-2026-003",
-        first_name: "Koffi",
-        last_name: "Amegan",
-        department: { name: "Développement & IT" },
-        position: { title: "Ingénieur Full-Stack Senior" },
-      },
-    },
-  ]);
+type Feedback = { kind: "success" | "error"; text: string };
 
+const STATUS: Record<string, { label: string; cls: string }> = {
+  ACTIVE: { label: "Actif", cls: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+  REVOKED: { label: "Révoqué", cls: "bg-rose-500/15 text-rose-300 border-rose-500/30" },
+  REPLACED: { label: "Remplacé", cls: "bg-slate-500/15 text-slate-300 border-slate-500/30" },
+  EXPIRED: { label: "Expiré", cls: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+};
+
+const inputCls =
+  "w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500";
+
+function describe(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return "Session expirée ou mode démonstration : reconnectez-vous avec un compte réel.";
+    if (err.status === 403) return "Action réservée aux gestionnaires de badges (RH).";
+    return err.message;
+  }
+  if (err instanceof TypeError) return "Serveur injoignable. Vérifiez que l'API est démarrée.";
+  return err instanceof Error ? err.message : "Une erreur inattendue est survenue.";
+}
+
+const fullName = (b: BadgeItem) =>
+  b.employee ? b.employee.full_name ?? `${b.employee.first_name} ${b.employee.last_name}` : "—";
+
+const formatDate = (d: string | null) => (d ? new Date(d.slice(0, 10) + "T00:00:00").toLocaleDateString("fr-FR") : "—");
+
+/** Un badge « actif » dont la date d'expiration est passée est affiché comme expiré. */
+function effectiveStatus(b: BadgeItem): string {
+  if (b.status === "ACTIVE" && b.expires_at && b.expires_at.slice(0, 10) < new Date().toISOString().slice(0, 10)) {
+    return "EXPIRED";
+  }
+  return b.status;
+}
+
+export default function BadgesPage() {
+  const { user } = useAuth();
+  const canManage = hasPermission(user, "badges.generate_revoke");
+
+  const [badges, setBadges] = useState<BadgeItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("ALL");
-  const [selectedBadge, setSelectedBadge] = useState<BadgeItem | null>(null);
-  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
-  const [isRevokeModalOpen, setIsRevokeModalOpen] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [issueOpen, setIssueOpen] = useState(false);
+  const [issueEmployee, setIssueEmployee] = useState("");
+  const [issueExpiry, setIssueExpiry] = useState("");
+  const [employeeSearch, setEmployeeSearch] = useState("");
+
+  const [revokeTarget, setRevokeTarget] = useState<BadgeItem | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
+
   const [verifyToken, setVerifyToken] = useState("");
-  const [verifyResult, setVerifyResult] = useState<{
-    status: "idle" | "valid" | "invalid";
-    message: string;
-    badge?: BadgeItem;
-  }>({ status: "idle", message: "" });
+  const [verifying, setVerifying] = useState(false);
+  const [verification, setVerification] = useState<BadgeVerification | null>(null);
 
-  // Issue form state
-  const [newMatricule, setNewMatricule] = useState("NTM-2026-004");
-  const [newFirstName, setNewFirstName] = useState("");
-  const [newLastName, setNewLastName] = useState("");
-  const [newDept, setNewDept] = useState("Consulting & Audit");
-  const [newPosition, setNewPosition] = useState("Consultant Senior");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const filteredBadges = badges.filter((b) => {
-    const matchesSearch =
-      b.badge_number.toLowerCase().includes(search.toLowerCase()) ||
-      b.employee.first_name.toLowerCase().includes(search.toLowerCase()) ||
-      b.employee.last_name.toLowerCase().includes(search.toLowerCase()) ||
-      b.employee.matricule.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = filterStatus === "ALL" || b.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+    badgeService
+      .list({ search: debouncedSearch || undefined, status: statusFilter || undefined, page })
+      .then((res) => {
+        if (cancelled) return;
+        setBadges(res.data);
+        setTotal(res.total);
+        setLastPage(res.last_page);
+        setLoadError(null);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setLoadError(describe(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage, debouncedSearch, statusFilter, page, reloadKey]);
 
-  const handleVerify = (e: React.FormEvent) => {
+  // Collaborateurs pour l'émission (chargés à l'ouverture de la fenêtre)
+  useEffect(() => {
+    if (!issueOpen || employees.length > 0) return;
+    let cancelled = false;
+    apiClient
+      .get<{ data: EmployeeOption[] }>("/employees", { per_page: 100 })
+      .then((res) => {
+        if (!cancelled) setEmployees(res.data ?? []);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setFeedback({ kind: "error", text: describe(err) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [issueOpen, employees.length]);
+
+  const filteredEmployees = useMemo(() => {
+    const q = employeeSearch.trim().toLowerCase();
+    return q ? employees.filter((e) => `${e.full_name} ${e.matricule}`.toLowerCase().includes(q)) : employees;
+  }, [employees, employeeSearch]);
+
+  const reload = () => {
+    setLoading(true);
+    setReloadKey((k) => k + 1);
+  };
+
+  const handleIssue = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!verifyToken.trim()) return;
-
-    const found = badges.find(
-      (b) =>
-        b.security_token.toLowerCase() === verifyToken.trim().toLowerCase() ||
-        b.badge_number.toLowerCase() === verifyToken.trim().toLowerCase()
-    );
-
-    if (!found) {
-      setVerifyResult({
-        status: "invalid",
-        message: "Jeton de sécurité inconnu ou invalide.",
+    if (!issueEmployee) return;
+    setBusyId("issue");
+    setFeedback(null);
+    try {
+      const badge = await badgeService.issue(issueEmployee, issueExpiry || undefined);
+      setFeedback({
+        kind: "success",
+        text: `Badge ${badge.badge_number} émis. L'éventuel badge précédent du collaborateur a été remplacé.`,
       });
-    } else if (found.status === "REVOKED") {
-      setVerifyResult({
-        status: "invalid",
-        message: `ALERTE SÉCURITÉ : Badge révoqué ! Motif : ${found.revocation_reason || "Non spécifié"}`,
-        badge: found,
-      });
-    } else {
-      setVerifyResult({
-        status: "valid",
-        message: "Badge actif & authentifié. Accès autorisé.",
-        badge: found,
-      });
+      setIssueOpen(false);
+      setIssueEmployee("");
+      setIssueExpiry("");
+      reload();
+    } catch (err) {
+      setFeedback({ kind: "error", text: describe(err) });
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const handleRevokeConfirm = () => {
-    if (!selectedBadge || !revokeReason.trim()) return;
-    setBadges((prev) =>
-      prev.map((b) =>
-        b.id === selectedBadge.id
-          ? {
-              ...b,
-              status: "REVOKED" as const,
-              revoked_at: new Date().toISOString().split("T")[0],
-              revocation_reason: revokeReason,
-            }
-          : b
-      )
-    );
-    setIsRevokeModalOpen(false);
-    setSelectedBadge(null);
-    setRevokeReason("");
+  const handleRevoke = async () => {
+    if (!revokeTarget || !revokeReason.trim()) return;
+    setBusyId(revokeTarget.id);
+    setFeedback(null);
+    try {
+      await badgeService.revoke(revokeTarget.id, revokeReason.trim());
+      setFeedback({ kind: "success", text: `Badge ${revokeTarget.badge_number} révoqué : il est refusé immédiatement.` });
+      setRevokeTarget(null);
+      setRevokeReason("");
+      reload();
+    } catch (err) {
+      setFeedback({ kind: "error", text: describe(err) });
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const handleIssueSubmit = (e: React.FormEvent) => {
+  const handlePrint = async (badge: BadgeItem) => {
+    setBusyId(badge.id);
+    setFeedback(null);
+    try {
+      await badgeService.print(badge);
+    } catch (err) {
+      setFeedback({ kind: "error", text: describe(err) });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFirstName || !newLastName) return;
-
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const newBadge: BadgeItem = {
-      id: `b-${Date.now()}`,
-      badge_number: `BDG-2026-${randomSuffix}`,
-      security_token: `NTEMO-SEC-${Math.random().toString(36).substring(2, 6).toUpperCase()}-2026`,
-      status: "ACTIVE",
-      issued_at: new Date().toISOString().split("T")[0],
-      expires_at: "2027-01-01",
-      employee: {
-        matricule: newMatricule,
-        first_name: newFirstName,
-        last_name: newLastName,
-        department: { name: newDept },
-        position: { title: newPosition },
-      },
-    };
-
-    setBadges([newBadge, ...badges]);
-    setIsIssueModalOpen(false);
-    setNewFirstName("");
-    setNewLastName("");
+    if (!verifyToken.trim()) return;
+    setVerifying(true);
+    setVerification(null);
+    try {
+      setVerification(await badgeService.verify(verifyToken.trim()));
+    } catch (err) {
+      setVerification({ is_valid: false, message: describe(err) });
+    } finally {
+      setVerifying(false);
+    }
   };
-
-  const activeCount = badges.filter((b) => b.status === "ACTIVE").length;
-  const revokedCount = badges.filter((b) => b.status === "REVOKED").length;
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
       <AdminSidebar />
 
       <main className="flex-1 p-8 overflow-y-auto">
-        {/* Top Header */}
-        <div className="flex items-center justify-between pb-6 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-slate-800 gap-4">
           <div>
-            <div className="flex items-center space-x-2">
-              <span className="text-2xl">🪪</span>
-              <h1 className="text-2xl font-bold text-white tracking-tight">
-                Badges Numériques & Sécurité
-              </h1>
-            </div>
-            <p className="text-sm text-slate-400 mt-1">
-              Contrôle d'accès, émission instantanée de cartes virtuelles et vérification de conformité
+            <h1 className="text-2xl font-bold text-white">🪪 Badges numériques</h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Émission, impression recto/verso (PDF format carte), révocation instantanée et contrôle (&sect;3.2)
             </p>
           </div>
-
-          <button
-            onClick={() => setIsIssueModalOpen(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium text-sm transition-colors shadow-sm"
-          >
-            <span>+</span>
-            <span>Émettre un Badge</span>
-          </button>
-        </div>
-
-        {/* KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 my-6">
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Badges Actifs
-            </span>
-            <div className="text-3xl font-extrabold text-emerald-400 mt-2">{activeCount}</div>
-            <p className="text-xs text-slate-500 mt-1">Accès autorisés sur site et mobile</p>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Badges Révoqués
-            </span>
-            <div className="text-3xl font-extrabold text-rose-400 mt-2">{revokedCount}</div>
-            <p className="text-xs text-slate-500 mt-1">Perte, vol ou départ de collaborateur</p>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Sécurité Décentralisée
-            </span>
-            <div className="text-3xl font-extrabold text-indigo-400 mt-2">100%</div>
-            <p className="text-xs text-slate-500 mt-1">Jetons signés & Chiffrement asymétrique</p>
-          </div>
-        </div>
-
-        {/* Scanner de Sécurité Rapide */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8">
-          <h2 className="text-lg font-semibold text-white mb-2 flex items-center space-x-2">
-            <span>🔍</span>
-            <span>Vérificateur de Sécurité (Borne & Accueil)</span>
-          </h2>
-          <p className="text-xs text-slate-400 mb-4">
-            Simulez le scan d'un badge physique ou virtuel à l'aide de son identifiant ou jeton de sécurité
-          </p>
-          <form onSubmit={handleVerify} className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              placeholder="Ex: NTEMO-SEC-A99F-2026 ou BDG-2026-00412"
-              value={verifyToken}
-              onChange={(e) => setVerifyToken(e.target.value)}
-              className="flex-1 bg-slate-950 border border-slate-700 px-4 py-2.5 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-            />
+          {canManage && (
             <button
-              type="submit"
-              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium border border-slate-700 transition-colors"
+              onClick={() => setIssueOpen(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold"
             >
-              Vérifier le Jeton
+              + Émettre un badge
             </button>
-          </form>
-
-          {verifyResult.status !== "idle" && (
-            <div
-              className={`mt-4 p-4 rounded-lg border ${
-                verifyResult.status === "valid"
-                  ? "bg-emerald-950/40 border-emerald-800 text-emerald-200"
-                  : "bg-rose-950/40 border-rose-800 text-rose-200"
-              }`}
-            >
-              <div className="flex items-center space-x-2 font-semibold text-sm">
-                <span>{verifyResult.status === "valid" ? "✅" : "🚫"}</span>
-                <span>{verifyResult.message}</span>
-              </div>
-              {verifyResult.badge && (
-                <div className="mt-2 text-xs grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80">
-                  <div>
-                    <span className="text-slate-400 block">Collaborateur</span>
-                    <span className="font-medium text-white">
-                      {verifyResult.badge.employee.first_name} {verifyResult.badge.employee.last_name}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Matricule</span>
-                    <span className="font-mono text-white">{verifyResult.badge.employee.matricule}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Département</span>
-                    <span className="text-white">{verifyResult.badge.employee.department?.name || "-"}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Statut Badge</span>
-                    <span
-                      className={`font-semibold ${
-                        verifyResult.badge.status === "ACTIVE" ? "text-emerald-400" : "text-rose-400"
-                      }`}
-                    >
-                      {verifyResult.badge.status}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
           )}
         </div>
 
-        {/* Listing Badges */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-          <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="flex items-center space-x-3 w-full sm:w-auto">
-              <input
-                type="text"
-                placeholder="Rechercher par nom, matricule ou n° de badge..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg text-sm text-slate-200 placeholder-slate-500 w-full sm:w-80 focus:outline-none focus:border-indigo-500"
-              />
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
-              >
-                <option value="ALL">Tous les statuts</option>
-                <option value="ACTIVE">Actif</option>
-                <option value="REVOKED">Révoqué</option>
-              </select>
-            </div>
-            <span className="text-xs text-slate-400 self-end sm:self-center">
-              {filteredBadges.length} badge(s) répertorié(s)
-            </span>
+        {feedback && (
+          <div
+            role={feedback.kind === "error" ? "alert" : "status"}
+            className={`mt-6 px-4 py-3 rounded-xl text-sm border ${
+              feedback.kind === "success"
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+            }`}
+          >
+            {feedback.kind === "success" ? "✅" : "⚠️"} {feedback.text}
           </div>
+        )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-300">
-              <thead className="bg-slate-950 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
-                <tr>
-                  <th className="py-3.5 px-4 font-semibold">N° Badge</th>
-                  <th className="py-3.5 px-4 font-semibold">Collaborateur</th>
-                  <th className="py-3.5 px-4 font-semibold">Département & Poste</th>
-                  <th className="py-3.5 px-4 font-semibold">Date Émission</th>
-                  <th className="py-3.5 px-4 font-semibold">Statut</th>
-                  <th className="py-3.5 px-4 font-semibold text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {filteredBadges.map((badge) => (
-                  <tr key={badge.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-medium text-white">
-                      {badge.badge_number}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="font-medium text-white">
-                        {badge.employee.first_name} {badge.employee.last_name}
-                      </div>
-                      <div className="text-xs text-slate-400 font-mono">
-                        {badge.employee.matricule}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="text-slate-200">{badge.employee.position?.title || "-"}</div>
-                      <div className="text-xs text-slate-400">{badge.employee.department?.name || "-"}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-xs font-mono">
-                      {badge.issued_at}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          badge.status === "ACTIVE"
-                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                            : badge.status === "REVOKED"
-                            ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                            : "bg-slate-700 text-slate-300"
-                        }`}
-                      >
-                        {badge.status === "ACTIVE" ? "Actif" : "Révoqué"}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right space-x-2">
-                      {badge.status === "ACTIVE" && (
-                        <button
-                          onClick={() => {
-                            setSelectedBadge(badge);
-                            setIsRevokeModalOpen(true);
-                          }}
-                          className="px-2.5 py-1 text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 rounded border border-rose-500/30 transition-colors"
-                        >
-                          Révoquer
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {!canManage ? (
+          <div className="mt-8 p-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-sm text-amber-300 max-w-2xl">
+            🔒 La gestion des badges est réservée aux RH. Votre badge virtuel est disponible dans l&rsquo;application
+            mobile NTEMO ONE (onglet « Badge »).
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mt-8">
+            {/* ── Liste ─────────────────────────────── */}
+            <section className="xl:col-span-3 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="p-5 border-b border-slate-800 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                <h2 className="text-base font-bold text-white">
+                  Badges émis <span className="text-slate-500 font-normal text-sm">({total})</span>
+                </h2>
+                <div className="flex gap-2">
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Nom ou matricule…"
+                    aria-label="Rechercher un badge"
+                    className={inputCls + " md:w-56"}
+                  />
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    aria-label="Filtrer par statut"
+                    className={inputCls + " md:w-40"}
+                  >
+                    <option value="">Tous statuts</option>
+                    <option value="ACTIVE">Actifs</option>
+                    <option value="REVOKED">Révoqués</option>
+                    <option value="REPLACED">Remplacés</option>
+                  </select>
+                </div>
+              </div>
 
-        {/* Modal Révoquer */}
-        {isRevokeModalOpen && selectedBadge && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
-              <h3 className="text-lg font-bold text-white mb-2">Révoquer le Badge</h3>
-              <p className="text-sm text-slate-400 mb-4">
-                Êtes-vous sûr de vouloir révoquer le badge{" "}
-                <span className="font-mono text-white font-semibold">{selectedBadge.badge_number}</span> de{" "}
-                {selectedBadge.employee.first_name} {selectedBadge.employee.last_name} ? Cette action invalidera immédiatement tout accès physique et pointage QR.
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-950 text-xs uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="py-3 px-4 font-semibold">Collaborateur</th>
+                      <th className="py-3 px-4 font-semibold">N° badge</th>
+                      <th className="py-3 px-4 font-semibold">Émis / Expire</th>
+                      <th className="py-3 px-4 font-semibold">Statut</th>
+                      <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {loading && (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-slate-400">
+                          Chargement…
+                        </td>
+                      </tr>
+                    )}
+                    {!loading && loadError && (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-rose-300">
+                          ⚠️ {loadError}{" "}
+                          <button onClick={reload} className="underline ml-1">
+                            Réessayer
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                    {!loading && !loadError && badges.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-slate-500">
+                          Aucun badge ne correspond.
+                        </td>
+                      </tr>
+                    )}
+                    {!loading &&
+                      !loadError &&
+                      badges.map((b) => {
+                        const status = effectiveStatus(b);
+                        const meta = STATUS[status] ?? { label: status, cls: "bg-slate-800 text-slate-300 border-slate-700" };
+                        return (
+                          <tr key={b.id} className="hover:bg-slate-800/30 align-top">
+                            <td className="py-3 px-4">
+                              <div className="text-white font-medium">{fullName(b)}</div>
+                              <div className="text-xs text-slate-500">
+                                <span className="font-mono">{b.employee?.matricule}</span>
+                                {b.employee?.position?.title && <> &bull; {b.employee.position.title}</>}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-mono text-xs">{b.badge_number}</td>
+                            <td className="py-3 px-4 text-xs whitespace-nowrap">
+                              {formatDate(b.issued_at)}
+                              <span className="block text-slate-500">→ {b.expires_at ? formatDate(b.expires_at) : "sans limite"}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${meta.cls}`}>{meta.label}</span>
+                              {b.revocation_reason && (
+                                <p className="text-[11px] text-slate-500 mt-1 max-w-[16rem]">{b.revocation_reason}</p>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right whitespace-nowrap space-x-2">
+                              {status === "ACTIVE" ? (
+                                <>
+                                  <button
+                                    onClick={() => handlePrint(b)}
+                                    disabled={busyId !== null}
+                                    className="px-2.5 py-1 text-xs bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded"
+                                  >
+                                    {busyId === b.id ? "…" : "🖨️ Imprimer"}
+                                  </button>
+                                  <button
+                                    onClick={() => setRevokeTarget(b)}
+                                    disabled={busyId !== null}
+                                    className="px-2.5 py-1 text-xs bg-rose-500/20 hover:bg-rose-500/30 disabled:opacity-50 text-rose-300 rounded border border-rose-500/30"
+                                  >
+                                    Révoquer
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-slate-600">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+
+              {lastPage > 1 && (
+                <div className="p-4 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-3 py-1.5 bg-slate-800 rounded disabled:opacity-40"
+                  >
+                    ← Précédent
+                  </button>
+                  <span>
+                    Page {page} / {lastPage}
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
+                    disabled={page >= lastPage}
+                    className="px-3 py-1.5 bg-slate-800 rounded disabled:opacity-40"
+                  >
+                    Suivant →
+                  </button>
+                </div>
+              )}
+            </section>
+
+            {/* ── Contrôle d'accès ─────────────────── */}
+            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 h-fit">
+              <h2 className="text-base font-bold text-white">🔍 Contrôler un badge</h2>
+              <p className="text-xs text-slate-400 mt-1 mb-4">
+                Collez le contenu du QR code scanné au verso d&rsquo;un badge pour vérifier sa validité en temps réel.
               </p>
+              <form onSubmit={handleVerify} className="space-y-3">
+                <textarea
+                  rows={3}
+                  value={verifyToken}
+                  onChange={(e) => setVerifyToken(e.target.value)}
+                  placeholder="Jeton de sécurité du badge…"
+                  aria-label="Jeton de sécurité"
+                  className={inputCls + " font-mono text-xs"}
+                />
+                <button
+                  type="submit"
+                  disabled={!verifyToken.trim() || verifying}
+                  className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl border border-slate-700"
+                >
+                  {verifying ? "Vérification…" : "Vérifier"}
+                </button>
+              </form>
+              {verification && (
+                <div
+                  role="status"
+                  className={`mt-4 p-3 rounded-xl border text-sm ${
+                    verification.is_valid
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                      : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                  }`}
+                >
+                  {verification.is_valid && verification.employee ? (
+                    <>
+                      <p className="font-bold">✅ Badge valide</p>
+                      <p className="text-white mt-1">{verification.employee.full_name}</p>
+                      <p className="text-xs text-slate-400">
+                        {verification.employee.matricule} &bull; {verification.employee.position ?? "—"}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {verification.badge_number} &bull; expire : {verification.expires_at ? formatDate(verification.expires_at) : "sans limite"}
+                      </p>
+                    </>
+                  ) : (
+                    <p>⛔ {verification.message ?? "Badge refusé."}</p>
+                  )}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
 
-              <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">
-                Motif de révocation *
+        {/* ── Émission ─────────────────────────────── */}
+        {issueOpen && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
+            <form onSubmit={handleIssue} className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full space-y-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Émettre un badge</h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Si le collaborateur possède déjà un badge actif, celui-ci sera automatiquement remplacé.
+                </p>
+              </div>
+              <label className="block">
+                <span className="block text-xs font-semibold text-slate-400 mb-1">Collaborateur</span>
+                <input
+                  type="search"
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  placeholder="Rechercher…"
+                  className={inputCls + " mb-2"}
+                />
+                <select
+                  value={issueEmployee}
+                  onChange={(e) => setIssueEmployee(e.target.value)}
+                  required
+                  className={inputCls}
+                >
+                  <option value="">— Sélectionner ({filteredEmployees.length}) —</option>
+                  {filteredEmployees.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name} — {e.matricule}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <textarea
-                rows={3}
-                required
-                value={revokeReason}
-                onChange={(e) => setRevokeReason(e.target.value)}
-                placeholder="Ex: Perte déclarée du smartphone, fin de contrat de mission..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-slate-200 focus:outline-none focus:border-rose-500 mb-4"
-              />
-
-              <div className="flex justify-end space-x-3">
+              <label className="block">
+                <span className="block text-xs font-semibold text-slate-400 mb-1">Date d&rsquo;expiration (optionnelle)</span>
+                <input type="date" value={issueExpiry} onChange={(e) => setIssueExpiry(e.target.value)} className={inputCls} />
+              </label>
+              <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsRevokeModalOpen(false)}
+                  onClick={() => setIssueOpen(false)}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm hover:bg-slate-700"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={!issueEmployee || busyId !== null}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold disabled:opacity-50"
+                >
+                  {busyId === "issue" ? "Émission…" : "Émettre"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ── Révocation ───────────────────────────── */}
+        {revokeTarget && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full">
+              <h3 className="text-lg font-bold text-white mb-1">Révoquer le badge</h3>
+              <p className="text-sm text-slate-400 mb-4">
+                {fullName(revokeTarget)} — <span className="font-mono">{revokeTarget.badge_number}</span>. Le badge sera
+                refusé immédiatement, y compris s&rsquo;il a été imprimé.
+              </p>
+              <label className="block">
+                <span className="block text-xs font-semibold text-slate-400 uppercase mb-1">Motif (obligatoire)</span>
+                <textarea
+                  rows={3}
+                  value={revokeReason}
+                  onChange={(e) => setRevokeReason(e.target.value)}
+                  placeholder="Ex : perte déclarée, fin de contrat…"
+                  className={inputCls + " mb-4"}
+                />
+              </label>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevokeTarget(null);
+                    setRevokeReason("");
+                  }}
                   className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm hover:bg-slate-700"
                 >
                   Annuler
                 </button>
                 <button
                   type="button"
-                  onClick={handleRevokeConfirm}
-                  disabled={!revokeReason.trim()}
+                  onClick={handleRevoke}
+                  disabled={!revokeReason.trim() || busyId !== null}
                   className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-medium disabled:opacity-50"
                 >
-                  Confirmer la Révocation
+                  Confirmer la révocation
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Émettre un Badge */}
-        {isIssueModalOpen && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-lg w-full shadow-2xl">
-              <h3 className="text-lg font-bold text-white mb-1">Émettre un Nouveau Badge</h3>
-              <p className="text-xs text-slate-400 mb-4">
-                Le nouveau badge remplacera tout badge actif précédent pour ce collaborateur.
-              </p>
-
-              <form onSubmit={handleIssueSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Prénom *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newFirstName}
-                      onChange={(e) => setNewFirstName(e.target.value)}
-                      placeholder="Prénom"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Nom *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newLastName}
-                      onChange={(e) => setNewLastName(e.target.value)}
-                      placeholder="Nom de famille"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Matricule</label>
-                    <input
-                      type="text"
-                      value={newMatricule}
-                      onChange={(e) => setNewMatricule(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Département</label>
-                    <input
-                      type="text"
-                      value={newDept}
-                      onChange={(e) => setNewDept(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Poste occupé</label>
-                  <input
-                    type="text"
-                    value={newPosition}
-                    onChange={(e) => setNewPosition(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsIssueModalOpen(false)}
-                    className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm hover:bg-slate-700"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium"
-                  >
-                    Générer le Badge
-                  </button>
-                </div>
-              </form>
             </div>
           </div>
         )}
@@ -528,4 +542,3 @@ export default function BadgesAdminPage() {
     </div>
   );
 }
-

@@ -12,6 +12,7 @@ class AiMessage extends Model
 
     protected $fillable = [
         'ai_conversation_id',
+        'position',
         'role',
         'content',
         'tokens_usage',

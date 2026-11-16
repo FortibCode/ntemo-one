@@ -63,6 +63,9 @@ class LeaveService
                 ->lockForUpdate()
                 ->first();
 
+            // Première demande de l'année sur un type plafonné : ouverture du solde selon les quotas
+            $balance ??= $this->openBalance($employee, $leaveType, $year);
+
             if ($balance && $balance->remaining_days < $totalDays) {
                 throw new InvalidArgumentException(
                     "Solde insuffisant pour ce type de congé (disponible : {$balance->remaining_days} j, demandé : {$totalDays} j)."
@@ -181,5 +184,39 @@ class LeaveService
             $balance->increment('remaining_days', $request->total_days);
         }
     }
-}
 
+    /** Correspondance code de type de congé → clé de quota dans les Paramètres de l'organisation. */
+    private const QUOTA_KEYS = ['ANNUAL' => 'annual', 'SICK' => 'sick', 'MATERNITY' => 'maternity', 'PATERNITY' => 'paternity'];
+
+    /**
+     * Quota annuel applicable : paramètre de l'organisation s'il existe, sinon valeur du type.
+     * Un quota nul signifie « non plafonné » (ex. congé sans solde) : aucun solde n'est tenu.
+     */
+    public function quotaFor(Employee $employee, LeaveType $leaveType): float
+    {
+        $key = self::QUOTA_KEYS[strtoupper((string) $leaveType->code)] ?? null;
+        $settings = $employee->organization?->settings['leave_quotas'] ?? [];
+
+        return (float) ($key !== null && isset($settings[$key]) ? $settings[$key] : $leaveType->default_days_per_year);
+    }
+
+    public function openBalance(Employee $employee, LeaveType $leaveType, int $year): ?LeaveBalance
+    {
+        $quota = $this->quotaFor($employee, $leaveType);
+        if ($quota <= 0) {
+            return null;
+        }
+
+        return LeaveBalance::firstOrCreate(
+            ['employee_id' => $employee->id, 'leave_type_id' => $leaveType->id, 'year' => $year],
+            [
+                'id' => (string) Str::uuid(),
+                'organization_id' => $employee->organization_id,
+                'allocated_days' => $quota,
+                'used_days' => 0,
+                'pending_days' => 0,
+                'remaining_days' => $quota,
+            ]
+        );
+    }
+}

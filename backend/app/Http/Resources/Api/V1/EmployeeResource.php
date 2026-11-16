@@ -52,6 +52,16 @@ class EmployeeResource extends JsonResource
                 'matricule' => $this->manager->matricule,
                 'full_name' => $this->manager->full_name,
             ] : null,
+            'has_account' => (bool) $this->user_id,
+            'current_contract' => $this->whenLoaded('contracts', function () {
+                $c = $this->contracts->firstWhere('status', 'ACTIVE');
+
+                return $c ? [
+                    'type' => $c->type,
+                    'start_date' => $c->start_date?->toDateString(),
+                    'end_date' => $c->end_date?->toDateString(),
+                ] : null;
+            }),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

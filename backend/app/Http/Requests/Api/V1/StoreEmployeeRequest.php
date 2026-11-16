@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\V1;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreEmployeeRequest extends FormRequest
 {
@@ -36,9 +37,9 @@ class StoreEmployeeRequest extends FormRequest
             'city' => ['nullable', 'string', 'max:100'],
             'national_id_number' => ['nullable', 'string', 'max:50'],
             'social_security_number' => ['nullable', 'string', 'max:50'],
-            'department_id' => ['nullable', 'uuid', 'exists:departments,id'],
-            'position_id' => ['nullable', 'uuid', 'exists:positions,id'],
-            'manager_id' => ['nullable', 'uuid', 'exists:employees,id'],
+            'department_id' => ['nullable', 'uuid', Rule::exists('departments', 'id')->where('organization_id', $this->user()->organization_id)],
+            'position_id' => ['nullable', 'uuid', Rule::exists('positions', 'id')->where('organization_id', $this->user()->organization_id)],
+            'manager_id' => ['nullable', 'uuid', Rule::exists('employees', 'id')->where('organization_id', $this->user()->organization_id)],
             'hire_date' => ['required', 'date'],
             'probation_end_date' => ['nullable', 'date', 'after_or_equal:hire_date'],
             'status' => ['nullable', 'in:ACTIVE,ON_LEAVE,SUSPENDED,TERMINATED'],

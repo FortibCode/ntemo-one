@@ -20,7 +20,8 @@ class LeaveTypeModel {
       id: json['id'],
       name: json['name'],
       code: json['code'],
-      defaultDaysPerYear: double.tryParse(json['default_days_per_year'].toString()) ?? 26.0,
+      defaultDaysPerYear:
+          double.tryParse(json['default_days_per_year'].toString()) ?? 26.0,
       isPaid: json['is_paid'] ?? true,
     );
   }
@@ -57,7 +58,43 @@ class LeaveRequestModel {
       totalDays: double.tryParse(json['total_days'].toString()) ?? 1.0,
       reason: json['reason'] ?? '',
       status: json['status'] ?? 'PENDING_N1',
-      createdAt: json['created_at'] != null ? json['created_at'].toString().substring(0, 10) : '',
+      createdAt: json['created_at'] != null
+          ? json['created_at'].toString().substring(0, 10)
+          : '',
+    );
+  }
+}
+
+/// Solde de l'année pour un type de congé plafonné.
+class LeaveBalanceModel {
+  final String typeName;
+  final String? typeCode;
+  final double allocated;
+  final double used;
+  final double pending;
+  final double remaining;
+
+  LeaveBalanceModel({
+    required this.typeName,
+    this.typeCode,
+    required this.allocated,
+    required this.used,
+    required this.pending,
+    required this.remaining,
+  });
+
+  factory LeaveBalanceModel.fromJson(Map<String, dynamic> json) {
+    final type = json['leave_type'] is Map
+        ? Map<String, dynamic>.from(json['leave_type'] as Map)
+        : const {};
+    double d(dynamic v) => v is num ? v.toDouble() : double.tryParse('$v') ?? 0;
+    return LeaveBalanceModel(
+      typeName: type['name']?.toString() ?? 'Congé',
+      typeCode: type['code']?.toString(),
+      allocated: d(json['allocated_days']),
+      used: d(json['used_days']),
+      pending: d(json['pending_days']),
+      remaining: d(json['remaining_days']),
     );
   }
 }
@@ -77,11 +114,23 @@ class LeavesService {
     return [];
   }
 
+  Future<List<LeaveBalanceModel>> getBalances() async {
+    final response = await apiClient.get('/leaves/balances');
+    if (response is Map && response['data'] is List) {
+      return (response['data'] as List)
+          .whereType<Map>()
+          .map((e) => LeaveBalanceModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    return [];
+  }
+
   Future<List<LeaveRequestModel>> getMyLeaveRequests() async {
     final response = await apiClient.get('/leaves/my-requests');
     if (response is Map && response['data'] is List) {
       return (response['data'] as List)
-          .map((item) => LeaveRequestModel.fromJson(item as Map<String, dynamic>))
+          .map((item) =>
+              LeaveRequestModel.fromJson(item as Map<String, dynamic>))
           .toList();
     }
     return [];
@@ -101,9 +150,9 @@ class LeavesService {
     });
 
     if (response is Map && response['data'] != null) {
-      return LeaveRequestModel.fromJson(response['data'] as Map<String, dynamic>);
+      return LeaveRequestModel.fromJson(
+          response['data'] as Map<String, dynamic>);
     }
     throw ApiException("Échec du dépôt de la demande.");
   }
 }
-

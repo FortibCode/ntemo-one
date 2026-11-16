@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ class AuthController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
+            app(AuditLogger::class)->record('auth.login_failed', $user, ['email' => $request->email], [], null, $user?->organization_id);
             throw ValidationException::withMessages([
                 'email' => ['Identifiants de connexion invalides.'],
             ]);
@@ -40,6 +42,9 @@ class AuthController extends Controller
 
         $deviceName = $request->input('device_name', 'Web Application');
         $token = $user->createToken($deviceName)->plainTextToken;
+        app(AuditLogger::class)->record('auth.login', $user, ['device' => $deviceName], [], $user);
+
+        $user->load(['organization', 'employee.department', 'employee.position', 'roles']);
 
         return response()->json([
             'success' => true,
@@ -50,15 +55,39 @@ class AuthController extends Controller
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    'employee' => $user->employee ? [
+                        'id' => $user->employee->id,
+                        'matricule' => $user->employee->matricule,
+                        'first_name' => $user->employee->first_name,
+                        'last_name' => $user->employee->last_name,
+                        'department' => $user->employee->department?->name,
+                        'position' => $user->employee->position?->title,
+                    ] : null,
                     'organization' => $user->organization ? [
                         'id' => $user->organization->id,
                         'name' => $user->organization->name,
                         'slug' => $user->organization->slug,
                     ] : null,
                     'roles' => $user->roles->pluck('slug'),
+                    'role_name' => $user->roles->first()?->name,
+                    'permissions' => $this->permissionSlugs($user),
                 ],
             ],
         ]);
+    }
+
+    /**
+     * Liste des permissions effectives ('*' pour le super administrateur).
+     */
+    private function permissionSlugs(User $user): array
+    {
+        if ($user->hasRole('super_admin')) {
+            return ['*'];
+        }
+
+        $user->loadMissing('roles.permissions');
+
+        return $user->roles->flatMap->permissions->pluck('slug')->unique()->values()->all();
     }
 
     /**
@@ -66,7 +95,7 @@ class AuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user()->load(['organization', 'roles.permissions', 'employee']);
+        $user = $request->user()->load(['organization', 'roles.permissions', 'employee.department', 'employee.position']);
 
         return response()->json([
             'success' => true,
@@ -78,9 +107,7 @@ class AuthController extends Controller
                 'organization' => $user->organization,
                 'employee' => $user->employee,
                 'roles' => $user->roles->pluck('slug'),
-                'permissions' => $user->hasRole('super_admin') 
-                    ? ['*'] 
-                    : $user->roles->flatMap->permissions->pluck('slug')->unique()->values(),
+                'permissions' => $this->permissionSlugs($user),
             ],
         ]);
     }
@@ -90,6 +117,7 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
+        app(AuditLogger::class)->record('auth.logout', $request->user());
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([

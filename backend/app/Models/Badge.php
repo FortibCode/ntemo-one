@@ -11,6 +11,9 @@ class Badge extends Model
 {
     use HasFactory, HasUuids, SoftDeletes;
 
+    /** Le jeton de sécurité n'est jamais exposé dans les listes (risque de clonage du badge). */
+    protected $hidden = ['security_token'];
+
     protected $fillable = [
         'organization_id',
         'employee_id',

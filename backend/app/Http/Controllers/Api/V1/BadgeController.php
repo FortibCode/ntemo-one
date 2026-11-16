@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
+use App\Services\Audit\AuditLogger;
 use App\Models\Badge;
 use App\Models\Employee;
 use App\Services\BadgeService;
@@ -10,6 +12,8 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Http\Response as HttpResponse;
+use App\Services\Documents\BadgePrintService;
 
 class BadgeController extends Controller
 {
@@ -22,6 +26,13 @@ class BadgeController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        if (!$request->user()->hasPermission('badges.generate_revoke')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Permission insuffisante pour consulter les badges.',
+            ], Response::HTTP_FORBIDDEN);
+        }
+
         $query = Badge::where('organization_id', $request->user()->organization_id)
             ->with(['employee.department', 'employee.position', 'template'])
             ->latest('created_at');
@@ -112,6 +123,9 @@ class BadgeController extends Controller
 
         $expiresAt = $request->expires_at ? Carbon::parse($request->expires_at) : null;
         $badge = $this->badgeService->issueBadge($employee, null, $user, $expiresAt);
+        app(NotificationService::class)->notifyEmployee($employee, 'BADGE', 'Nouveau badge disponible',
+            "Votre badge {$badge->badge_number} est disponible dans l'onglet Badge de l'application.", ['badge_id' => $badge->id], $user);
+        app(AuditLogger::class)->record('badge.issued', $badge, ['badge_number' => $badge->badge_number, 'employee' => $employee->matricule]);
 
         return response()->json([
             'success' => true,
@@ -142,6 +156,9 @@ class BadgeController extends Controller
             ->firstOrFail();
 
         $revokedBadge = $this->badgeService->revokeBadge($badge, $request->reason, $user);
+        app(NotificationService::class)->notifyEmployee($revokedBadge->employee, 'BADGE', 'Badge révoqué',
+            "Votre badge {$revokedBadge->badge_number} a été désactivé. Contactez le service RH.", ['badge_id' => $revokedBadge->id], $user);
+        app(AuditLogger::class)->record('badge.revoked', $revokedBadge, ['reason' => $request->reason, 'badge_number' => $revokedBadge->badge_number]);
 
         return response()->json([
             'success' => true,
@@ -166,5 +183,37 @@ class BadgeController extends Controller
 
         return response()->json($result, $result['is_valid'] ? Response::HTTP_OK : Response::HTTP_UNPROCESSABLE_ENTITY);
     }
-}
 
+    /**
+     * Badge imprimable recto/verso (PDF, format carte CR80).
+     */
+    public function print(Request $request, string $id, BadgePrintService $printer): HttpResponse|JsonResponse
+    {
+        if (!$request->user()->hasPermission('badges.generate_revoke')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Permission insuffisante pour imprimer des badges.',
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        $badge = Badge::where('id', $id)
+            ->where('organization_id', $request->user()->organization_id)
+            ->firstOrFail();
+
+        if (!$badge->isActive()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Seul un badge actif et non expiré peut être imprimé.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $filename = "badge-{$badge->badge_number}.pdf";
+        app(AuditLogger::class)->record('badge.printed', $badge, ['badge_number' => $badge->badge_number]);
+
+        return response($printer->pdf($badge), Response::HTTP_OK, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+}

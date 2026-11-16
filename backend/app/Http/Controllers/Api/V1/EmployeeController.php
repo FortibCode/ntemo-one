@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\Audit\AuditLogger;
 use App\Http\Requests\Api\V1\StoreEmployeeRequest;
 use App\Http\Requests\Api\V1\UpdateEmployeeRequest;
 use App\Http\Resources\Api\V1\EmployeeResource;
@@ -25,7 +26,7 @@ class EmployeeController extends Controller
     {
         $user = $request->user();
         $query = Employee::where('organization_id', $user->organization_id)
-            ->with(['department', 'position', 'manager']);
+            ->with(['department', 'position', 'manager', 'contracts']);
 
         // Si l'utilisateur a uniquement le droit d'équipe
         if (!$user->hasPermission('employees.view_all') && $user->hasPermission('employees.view_team')) {
@@ -81,6 +82,8 @@ class EmployeeController extends Controller
             $request->validated()
         );
 
+        app(AuditLogger::class)->record('employee.created', $employee, ['matricule' => $employee->matricule, 'name' => $employee->full_name]);
+
         return (new EmployeeResource($employee))
             ->response()
             ->setStatusCode(Response::HTTP_CREATED);
@@ -121,7 +124,12 @@ class EmployeeController extends Controller
         $user = $request->user();
         $employee = Employee::where('organization_id', $user->organization_id)->findOrFail($id);
 
+        $before = $employee->only(array_keys($request->validated()));
         $updatedEmployee = $this->employeeService->updateEmployee($employee, $request->validated());
+        [$old, $new] = app(AuditLogger::class)->diff($before, $updatedEmployee->only(array_keys($request->validated())));
+        if ($new) {
+            app(AuditLogger::class)->record('employee.updated', $updatedEmployee, $new, $old);
+        }
 
         return (new EmployeeResource($updatedEmployee))->response();
     }
@@ -143,6 +151,7 @@ class EmployeeController extends Controller
         $employee = Employee::where('organization_id', $user->organization_id)->findOrFail($id);
         $employee->update(['status' => 'TERMINATED', 'termination_date' => now()->toDateString()]);
         $employee->delete();
+        app(AuditLogger::class)->record('employee.archived', $employee, [], ['matricule' => $employee->matricule, 'name' => $employee->full_name]);
 
         return response()->json([
             'success' => true,

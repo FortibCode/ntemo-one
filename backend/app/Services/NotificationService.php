@@ -70,5 +70,27 @@ class NotificationService
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
     }
-}
 
+    /**
+     * Notifie le compte utilisateur d'un collaborateur (sans effet s'il n'a pas de compte
+     * ou s'il est l'auteur de l'action). Ne bloque jamais l'action métier.
+     */
+    public function notifyEmployee(
+        ?\App\Models\Employee $employee,
+        string $type,
+        string $title,
+        string $message,
+        array $data = [],
+        ?User $actor = null
+    ): void {
+        try {
+            $recipient = $employee?->user;
+            if (!$recipient || ($actor && $recipient->id === $actor->id)) {
+                return;
+            }
+            $this->send($recipient, $type, $title, $message, $data);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Notification non envoyée', ['type' => $type, 'error' => $e->getMessage()]);
+        }
+    }
+}
