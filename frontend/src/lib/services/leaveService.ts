@@ -1,124 +1,69 @@
 // =============================================================================
-// Leave Service — NTEMO ONE
+// Leave Service — NTEMO ONE (demandes, validation N+1 / RH, calendrier partagé)
 // =============================================================================
 
-import { apiClient, ApiResponse, QueryParams } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+export type LeaveStatus = 'PENDING_N1' | 'PENDING_HR' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
-export interface LeaveRequest {
+export interface LeaveType {
   id: string;
-  employee_id: string;
-  employee_name: string;
-  type: string;
+  name: string;
+  code: string | null;
+  default_days_per_year: string | number;
+  is_paid: boolean;
+}
+
+export interface MyLeaveRequest {
+  id: string;
   start_date: string;
   end_date: string;
-  days_count: number;
-  reason: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
-  approved_by: string | null;
-  approved_at: string | null;
-  rejection_reason: string | null;
-  comment: string | null;
+  total_days: string | number;
+  reason: string | null;
+  status: LeaveStatus;
   created_at: string;
-  updated_at: string;
+  leave_type: { id: string; name: string } | null;
 }
 
-export interface LeaveFilters extends QueryParams {
-  employee_id?: string;
-  department_id?: string;
-  status?: LeaveRequest['status'];
-  type?: string;
-  date_from?: string;
-  date_to?: string;
-  page?: number;
-  per_page?: number;
-}
-
-export interface CreateLeaveRequestData {
-  type: string;
+export interface PendingLeave {
+  id: string;
+  status: LeaveStatus;
   start_date: string;
   end_date: string;
-  reason: string;
+  total_days: number;
+  reason: string | null;
+  leave_type: string | null;
+  review_level: 'N1' | 'HR';
+  employee: { full_name: string; matricule: string; department: string | null };
 }
 
-export interface LeaveBalance {
-  employee_id: string;
-  employee_name: string;
-  balances: LeaveTypeBalance[];
+export interface CalendarLeave {
+  id: string;
+  status: LeaveStatus;
+  start_date: string;
+  end_date: string;
+  leave_type: string | null;
+  employee: { id: string; full_name: string; department: string | null };
 }
-
-export interface LeaveTypeBalance {
-  type: string;
-  label: string;
-  allocated: number;
-  used: number;
-  pending: number;
-  remaining: number;
-}
-
-export interface LeaveStats {
-  pending_requests: number;
-  approved_this_month: number;
-  rejected_this_month: number;
-  employees_on_leave: number;
-  most_requested_type: string;
-}
-
-export interface PaginatedLeaveRequests {
-  data: LeaveRequest[];
-  meta?: {
-    current_page: number;
-    from: number | null;
-    last_page: number;
-    per_page: number;
-    to: number | null;
-    total: number;
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Service
-// ---------------------------------------------------------------------------
-
-const BASE = '/leaves';
 
 export const leaveService = {
-  /** List leave requests with optional filters & pagination. */
-  getLeaveRequests(filters?: LeaveFilters) {
-    return apiClient.get<PaginatedLeaveRequests>(BASE, filters);
+  async types(): Promise<LeaveType[]> {
+    return (await apiClient.get<{ data: LeaveType[] }>('/leaves/types')).data;
   },
-
-  /** Create a new leave request. */
-  createLeaveRequest(data: CreateLeaveRequestData) {
-    return apiClient.post<ApiResponse<LeaveRequest>>(BASE, data);
+  async mine(): Promise<MyLeaveRequest[]> {
+    return (await apiClient.get<{ data: MyLeaveRequest[] }>('/leaves/my-requests')).data ?? [];
   },
-
-  /** Approve a leave request. */
-  approveLeave(id: string, comment?: string) {
-    return apiClient.put<ApiResponse<LeaveRequest>>(`${BASE}/${id}/approve`, {
-      comment,
-    });
+  async pending(): Promise<PendingLeave[]> {
+    return (await apiClient.get<{ data: PendingLeave[] }>('/leaves/pending')).data;
   },
-
-  /** Reject a leave request with a mandatory reason. */
-  rejectLeave(id: string, reason: string) {
-    return apiClient.put<ApiResponse<LeaveRequest>>(`${BASE}/${id}/reject`, {
-      reason,
-    });
+  async calendar(month: string): Promise<CalendarLeave[]> {
+    return (await apiClient.get<{ data: CalendarLeave[] }>('/leaves/calendar', { month })).data;
   },
-
-  /** Get leave balance for a specific employee. */
-  getLeaveBalance(employeeId: string) {
-    return apiClient.get<ApiResponse<LeaveBalance>>(
-      `/employees/${employeeId}/leave-balance`,
-    );
+  request(payload: { leave_type_id: string; start_date: string; end_date: string; reason: string }) {
+    return apiClient.post<{ data: MyLeaveRequest; message?: string }>('/leaves/requests', payload);
   },
-
-  /** Aggregate leave statistics. */
-  getLeaveStats() {
-    return apiClient.get<ApiResponse<LeaveStats>>(`${BASE}/stats`);
+  review(item: PendingLeave, approved: boolean, comments?: string) {
+    const path = item.review_level === 'N1' ? 'review-n1' : 'review-hr';
+    return apiClient.post<{ message: string }>(`/leaves/requests/${item.id}/${path}`, { approved, comments });
   },
 };

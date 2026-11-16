@@ -10,6 +10,7 @@ use App\Models\Department;
 use App\Models\Position;
 use App\Models\Employee;
 use App\Models\AttendanceDevice;
+use App\Models\LeaveType;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -308,10 +309,34 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // 8. Modèles documentaires officiels
+        // 8. Types de congé (quotas surchargés par Paramètres → Congés)
+        foreach ([
+            ['code' => 'ANNUAL', 'name' => 'Congé annuel payé', 'days' => 30, 'paid' => true, 'n1' => true],
+            ['code' => 'SICK', 'name' => 'Congé maladie', 'days' => 15, 'paid' => true, 'n1' => false, 'attachment' => true],
+            ['code' => 'MATERNITY', 'name' => 'Congé maternité', 'days' => 90, 'paid' => true, 'n1' => false, 'attachment' => true],
+            ['code' => 'PATERNITY', 'name' => 'Congé paternité', 'days' => 10, 'paid' => true, 'n1' => true],
+            ['code' => 'EXCEPTIONAL', 'name' => 'Permission exceptionnelle (événement familial)', 'days' => 5, 'paid' => true, 'n1' => true],
+            ['code' => 'UNPAID', 'name' => 'Congé sans solde', 'days' => 0, 'paid' => false, 'n1' => true],
+        ] as $type) {
+            LeaveType::firstOrCreate(
+                ['organization_id' => $organization->id, 'code' => $type['code']],
+                [
+                    'id' => (string) Str::uuid(),
+                    'name' => $type['name'],
+                    'default_days_per_year' => $type['days'],
+                    'is_paid' => $type['paid'],
+                    'requires_attachment' => $type['attachment'] ?? false,
+                    'requires_manager_approval' => $type['n1'],
+                    'requires_hr_approval' => true,
+                    'is_active' => true,
+                ]
+            );
+        }
+
+        // 9. Modèles documentaires officiels
         $this->callWith(DocumentTemplateSeeder::class, ['organization' => $organization]);
 
-        // 9. Projets et tâches de démonstration
+        // 10. Projets et tâches de démonstration
         $this->callWith(DemoProjectSeeder::class, ['organization' => $organization]);
     }
 }

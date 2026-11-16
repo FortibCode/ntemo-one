@@ -82,6 +82,9 @@ Route::prefix('v1')->group(function () {
             // Module Congés & Approbations
             Route::get('/leaves/types', [LeaveController::class, 'types']);
             Route::get('/leaves/my-requests', [LeaveController::class, 'index']);
+            Route::get('/leaves/pending', [LeaveController::class, 'pending']);
+            Route::get('/leaves/balances', [LeaveController::class, 'balances']);
+            Route::get('/leaves/calendar', [LeaveController::class, 'calendar']);
             Route::post('/leaves/requests', [LeaveController::class, 'store']);
             Route::post('/leaves/requests/{id}/review-n1', [LeaveController::class, 'reviewByManager']);
             Route::post('/leaves/requests/{id}/review-hr', [LeaveController::class, 'reviewByHr']);

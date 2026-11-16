@@ -10,7 +10,7 @@ const navItems = [
   { label: "Tableau de Bord", href: "/", icon: "📊" },
   { label: "Collaborateurs & RH", href: "/employees", icon: "👥" },
   { label: "Pointage & Présences (15s)", href: "/attendance", icon: "⏱️" },
-  { label: "Validation des Congés", href: "/leaves", icon: "🏖️" },
+  { label: "Congés & Absences", href: "/leaves", icon: "🏖️" },
   { label: "Badges Numériques", href: "/badges", icon: "🪪" },
   { label: "Moteur Documentaire", href: "/documents", icon: "📄" },
   { label: "Projets & Tâches", href: "/projects", icon: "📈" },
