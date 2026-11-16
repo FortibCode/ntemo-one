@@ -3,14 +3,12 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { apiClient } from "@/lib/api";
-import { api } from "@/services/api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
 
 /** Synchronise le jeton dans les clients API (ils le mettent en cache au chargement). */
 function syncApiToken(token: string | null) {
   apiClient.setToken(token);
-  api.setToken(token);
 }
 
 export interface AuthUser {

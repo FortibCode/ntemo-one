@@ -12,13 +12,12 @@ import {
 } from "@/lib/services/gedService";
 
 interface Props {
-  employee: { id: string; full_name: string; matricule: string };
+  employeeId: string;
   canUpload: boolean;
-  onClose: () => void;
 }
 
 const inputCls =
-  "w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500";
+  "w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500";
 
 function describe(err: unknown): string {
   if (err instanceof ApiError) {
@@ -33,8 +32,8 @@ function describe(err: unknown): string {
 const formatSize = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} Ko` : `${(b / 1024 / 1024).toFixed(1)} Mo`);
 const formatDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString("fr-FR");
 
-/** Dossier RH d'un collaborateur : pièces jointes (GED), téléversement et téléchargement. */
-export default function EmployeeDocumentsPanel({ employee, canUpload, onClose }: Props) {
+/** Pièces du dossier RH d'un collaborateur (GED) : liste, téléversement, téléchargement. */
+export default function EmployeeDocuments({ employeeId, canUpload }: Props) {
   const [docs, setDocs] = useState<GedDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +51,7 @@ export default function EmployeeDocumentsPanel({ employee, canUpload, onClose }:
   useEffect(() => {
     let cancelled = false;
     gedService
-      .list(employee.id)
+      .list(employeeId)
       .then((d) => {
         if (cancelled) return;
         setDocs(d);
@@ -67,14 +66,7 @@ export default function EmployeeDocumentsPanel({ employee, canUpload, onClose }:
     return () => {
       cancelled = true;
     };
-  }, [employee.id, reloadKey]);
-
-  // Fermeture au clavier
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [employeeId, reloadKey]);
 
   const pickFile = (f: File | null) => {
     setMessage(null);
@@ -95,7 +87,7 @@ export default function EmployeeDocumentsPanel({ employee, canUpload, onClose }:
     setBusy(true);
     setError(null);
     try {
-      await gedService.upload(employee.id, {
+      await gedService.upload(employeeId, {
         file,
         title: title.trim(),
         category,
@@ -130,58 +122,45 @@ export default function EmployeeDocumentsPanel({ employee, canUpload, onClose }:
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true" aria-labelledby="ged-title">
-      <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between gap-4">
-          <div>
-            <h3 id="ged-title" className="text-lg font-bold text-slate-900">
-              Dossier RH — {employee.full_name}
-            </h3>
-            <p className="text-xs text-slate-500 font-mono">{employee.matricule}</p>
-          </div>
-          <button onClick={onClose} aria-label="Fermer" className="text-slate-400 hover:text-slate-700 text-xl leading-none">
-            ×
-          </button>
-        </div>
-
-        <div className="p-6 space-y-5">
-          {message && <p role="status" className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">✅ {message}</p>}
-          {error && <p role="alert" className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">⚠️ {error}</p>}
+    <div>
+        <div className="space-y-5">
+          {message && <p role="status" className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2">✅ {message}</p>}
+          {error && <p role="alert" className="text-sm text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2">⚠️ {error}</p>}
 
           {loading ? (
             <p className="text-sm text-slate-500">Chargement des pièces…</p>
           ) : docs.length === 0 ? (
             <p className="text-sm text-slate-500">Aucune pièce dans ce dossier.</p>
           ) : (
-            <ul className="divide-y divide-slate-200 border border-slate-200 rounded-xl">
+            <ul className="divide-y divide-slate-800 border border-slate-800 rounded-xl">
               {docs.map((d) => (
                 <li key={d.id} className="px-4 py-3 flex items-center gap-3">
                   <span className="text-xl" aria-hidden>
                     {d.mime_type === "application/pdf" ? "📕" : d.mime_type.startsWith("image/") ? "🖼️" : "📄"}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">
+                    <p className="text-sm font-medium text-white truncate">
                       {d.title}
-                      {d.is_confidential && <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-500 border border-slate-300 rounded px-1">Confidentiel</span>}
+                      {d.is_confidential && <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-400 border border-slate-700 rounded px-1">Confidentiel</span>}
                     </p>
                     <p className="text-xs text-slate-500">
                       {GED_CATEGORIES[d.category] ?? d.category} &bull; {d.file_name} &bull; {formatSize(d.file_size)}
                       {d.uploaded_by && <> &bull; par {d.uploaded_by}</>}
                     </p>
                     {d.expiration_date && (
-                      <p className={`text-xs mt-0.5 ${d.is_expired ? "text-rose-600 font-semibold" : "text-slate-500"}`}>
+                      <p className={`text-xs mt-0.5 ${d.is_expired ? "text-rose-300 font-semibold" : "text-slate-500"}`}>
                         {d.is_expired ? "⚠ Expirée depuis le" : "Expire le"} {formatDate(d.expiration_date)}
                       </p>
                     )}
                   </div>
                   <button
                     onClick={() => gedService.download(d).catch((err) => setError(describe(err)))}
-                    className="px-3 py-1.5 text-xs font-medium text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50"
+                    className="px-3 py-1.5 text-xs font-medium text-sky-300 border border-sky-500/30 rounded-lg hover:bg-sky-500/10"
                   >
                     Télécharger
                   </button>
                   {canUpload && (
-                    <button onClick={() => remove(d)} disabled={busy} aria-label={`Retirer ${d.title}`} className="text-slate-400 hover:text-rose-600 px-1">
+                    <button onClick={() => remove(d)} disabled={busy} aria-label={`Retirer ${d.title}`} className="text-slate-500 hover:text-rose-300 px-1">
                       ✕
                     </button>
                   )}
@@ -191,14 +170,14 @@ export default function EmployeeDocumentsPanel({ employee, canUpload, onClose }:
           )}
 
           {canUpload && (
-            <form onSubmit={upload} className="border border-dashed border-slate-300 rounded-xl p-4 space-y-3">
-              <h4 className="text-sm font-semibold text-slate-800">Ajouter une pièce</h4>
+            <form onSubmit={upload} className="border border-dashed border-slate-700 rounded-xl p-4 space-y-3">
+              <h4 className="text-sm font-semibold text-white">Ajouter une pièce</h4>
               <input
                 ref={fileInput}
                 type="file"
                 accept={GED_ACCEPT}
                 onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-slate-600 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700"
+                className="block w-full text-sm text-slate-400 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-sky-500/15 file:text-sky-300"
                 aria-label="Fichier"
               />
               <p className="text-[11px] text-slate-500">PDF, image (JPG, PNG, WebP) ou Word — 10 Mo maximum.</p>
@@ -221,21 +200,20 @@ export default function EmployeeDocumentsPanel({ employee, canUpload, onClose }:
                   <input type="date" value={expiration} onChange={(e) => setExpiration(e.target.value)} title="Date d'expiration (facultative)" className={inputCls} />
                 </label>
               </div>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input type="checkbox" checked={confidential} onChange={(e) => setConfidential(e.target.checked)} />
                 Confidentiel (visible uniquement par les RH)
               </label>
               <button
                 type="submit"
                 disabled={busy || !file || !title.trim()}
-                className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 rounded-lg"
+                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-lg"
               >
                 {busy ? "Envoi…" : "Téléverser"}
               </button>
             </form>
           )}
         </div>
-      </div>
     </div>
   );
 }

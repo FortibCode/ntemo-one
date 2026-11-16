@@ -1,93 +1,109 @@
 // =============================================================================
-// Employee Service — NTEMO ONE
+// Employee Service — NTEMO ONE (dossiers, structure, contrats, comptes)
 // =============================================================================
 
-import { apiClient, ApiResponse, QueryParams } from '@/lib/api';
-import type { Employee, PaginatedResponse } from '@/types';
+import { apiClient } from '@/lib/api';
 
-// ---------------------------------------------------------------------------
-// Request / filter types
-// ---------------------------------------------------------------------------
+export type EmployeeStatus = 'ACTIVE' | 'ON_LEAVE' | 'SUSPENDED' | 'TERMINATED';
+export type ContractType = 'CDI' | 'CDD' | 'STAGE' | 'PRESTATION' | 'APPRENTISSAGE';
 
-export interface EmployeeFilters extends QueryParams {
-  search?: string;
-  status?: Employee['status'];
-  department_id?: string;
-  position_id?: string;
-  page?: number;
-  per_page?: number;
+export interface EmployeeItem {
+  id: string;
+  matricule: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  gender: 'M' | 'F' | null;
+  birth_date: string | null;
+  nationality: string | null;
+  address: string | null;
+  city: string | null;
+  national_id_number: string | null;
+  status: EmployeeStatus;
+  hire_date: string | null;
+  probation_end_date: string | null;
+  department: { id: string; name: string; code: string | null } | null;
+  position: { id: string; title: string; code: string | null } | null;
+  manager: { id: string; matricule: string; full_name: string } | null;
+  has_account: boolean;
+  current_contract?: { type: ContractType; start_date: string; end_date: string | null } | null;
 }
 
-export interface CreateEmployeeData {
+export interface EmployeePage {
+  data: EmployeeItem[];
+  meta?: { current_page: number; last_page: number; total: number };
+}
+
+export interface EmployeeInput {
   first_name: string;
   last_name: string;
   email?: string | null;
   phone?: string | null;
   gender?: 'M' | 'F' | null;
   birth_date?: string | null;
-  birth_place?: string | null;
   nationality?: string | null;
-  marital_status?: string | null;
-  dependent_children?: number;
   address?: string | null;
   city?: string | null;
   national_id_number?: string | null;
-  social_security_number?: string | null;
-  hire_date: string;
   department_id?: string | null;
   position_id?: string | null;
   manager_id?: string | null;
+  hire_date: string;
+  status?: EmployeeStatus;
 }
 
-export type UpdateEmployeeData = Partial<CreateEmployeeData>;
-
-// ---------------------------------------------------------------------------
-// Response types
-// ---------------------------------------------------------------------------
-
-export interface EmployeeStats {
-  total: number;
-  active: number;
-  on_leave: number;
-  suspended: number;
-  terminated: number;
-  new_this_month: number;
+export interface Structure {
+  departments: { id: string; name: string; code: string | null }[];
+  positions: { id: string; title: string; code: string | null; department_id: string | null }[];
 }
 
-// ---------------------------------------------------------------------------
-// Service
-// ---------------------------------------------------------------------------
+export interface ContractItem {
+  id: string;
+  type: ContractType;
+  reference: string | null;
+  status: 'ACTIVE' | 'EXPIRED' | 'TERMINATED' | 'DRAFT';
+  start_date: string;
+  end_date: string | null;
+  probation_end_date: string | null;
+  gross_salary: number | null;
+  currency: string;
+  notes: string | null;
+}
 
-const BASE = '/employees';
+export interface CreatedAccount {
+  user_id: string;
+  email: string;
+  role: string;
+  temporary_password: string;
+}
 
 export const employeeService = {
-  /** List employees with optional filters & pagination. */
-  getEmployees(filters?: EmployeeFilters) {
-    return apiClient.get<PaginatedResponse<Employee>>(BASE, filters);
+  list(params: { search?: string; status?: string; department_id?: string; page?: number; per_page?: number } = {}) {
+    return apiClient.get<EmployeePage>('/employees', { per_page: 25, ...params });
   },
-
-  /** Get a single employee by ID. */
-  getEmployee(id: string) {
-    return apiClient.get<ApiResponse<Employee>>(`${BASE}/${id}`);
+  async create(input: EmployeeInput): Promise<EmployeeItem> {
+    return (await apiClient.post<{ data: EmployeeItem }>('/employees', input)).data;
   },
-
-  /** Create a new employee. */
-  createEmployee(data: CreateEmployeeData) {
-    return apiClient.post<ApiResponse<Employee>>(BASE, data);
+  async update(id: string, input: Partial<EmployeeInput>): Promise<EmployeeItem> {
+    return (await apiClient.put<{ data: EmployeeItem }>(`/employees/${id}`, input)).data;
   },
-
-  /** Update an existing employee. */
-  updateEmployee(id: string, data: UpdateEmployeeData) {
-    return apiClient.put<ApiResponse<Employee>>(`${BASE}/${id}`, data);
+  async structure(): Promise<Structure> {
+    return (await apiClient.get<{ data: Structure }>('/structure')).data;
   },
-
-  /** Delete (soft-delete) an employee. */
-  deleteEmployee(id: string) {
-    return apiClient.delete<ApiResponse<null>>(`${BASE}/${id}`);
+  async contracts(employeeId: string): Promise<ContractItem[]> {
+    return (await apiClient.get<{ data: ContractItem[] }>(`/employees/${employeeId}/contracts`)).data;
   },
-
-  /** Aggregate stats for the dashboard. */
-  getEmployeeStats() {
-    return apiClient.get<ApiResponse<EmployeeStats>>(`${BASE}/stats`);
+  async addContract(
+    employeeId: string,
+    input: { type: ContractType; start_date: string; end_date?: string | null; probation_end_date?: string | null; gross_salary?: number | null; reference?: string | null },
+  ): Promise<ContractItem> {
+    return (await apiClient.post<{ data: ContractItem }>(`/employees/${employeeId}/contracts`, input)).data;
+  },
+  async createAccount(employeeId: string, roleId: string, email?: string): Promise<CreatedAccount> {
+    return (
+      await apiClient.post<{ data: CreatedAccount }>(`/employees/${employeeId}/account`, { role_id: roleId, email: email || undefined })
+    ).data;
   },
 };

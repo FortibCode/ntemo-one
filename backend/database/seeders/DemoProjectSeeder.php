@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Contract;
 use App\Models\Employee;
 use App\Models\Organization;
 use App\Models\Project;
@@ -25,6 +26,25 @@ class DemoProjectSeeder extends Seeder
         // L'équipe du responsable de projet (périmètre de validation)
         if ($manager && $collaborator && !$collaborator->manager_id) {
             $collaborator->update(['manager_id' => $manager->id]);
+        }
+
+        // Contrats de démonstration (un CDD avec fin de période d'essai proche → alerte tableau de bord)
+        foreach (Employee::where('organization_id', $organization->id)->get() as $employee) {
+            if (Contract::where('employee_id', $employee->id)->exists()) {
+                continue;
+            }
+            $isCdd = $employee->email === 'collaborateur@ntemo.com';
+            Contract::create([
+                'id' => (string) Str::uuid(),
+                'organization_id' => $organization->id,
+                'employee_id' => $employee->id,
+                'type' => $isCdd ? 'CDD' : 'CDI',
+                'start_date' => $isCdd ? '2026-09-01' : '2026-01-01',
+                'end_date' => $isCdd ? '2027-08-31' : null,
+                'probation_end_date' => $isCdd ? '2026-12-01' : null,
+                'currency' => 'XAF',
+                'status' => 'ACTIVE',
+            ]);
         }
 
         $projects = [

@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Controllers\Api\V1\EmployeeDocumentController;
 use App\Http\Controllers\Api\V1\AuditLogController;
+use App\Http\Controllers\Api\V1\HrAdminController;
 use App\Http\Middleware\EnsureBelongsToOrganization;
 use App\Http\Middleware\EnsureUserHasPermission;
 use Illuminate\Support\Facades\Route;
@@ -43,6 +44,14 @@ Route::prefix('v1')->group(function () {
 
             // Module Employés
             Route::apiResource('employees', EmployeeController::class);
+
+            // Structure, contrats et comptes de connexion
+            Route::get('/structure', [HrAdminController::class, 'structure']);
+            Route::post('/departments', [HrAdminController::class, 'storeDepartment']);
+            Route::post('/positions', [HrAdminController::class, 'storePosition']);
+            Route::get('/employees/{employeeId}/contracts', [HrAdminController::class, 'contracts']);
+            Route::post('/employees/{employeeId}/contracts', [HrAdminController::class, 'storeContract']);
+            Route::post('/employees/{employeeId}/account', [HrAdminController::class, 'createAccount']);
 
             // GED : pièces du dossier collaborateur
             Route::get('/employees/{employeeId}/documents', [EmployeeDocumentController::class, 'index']);

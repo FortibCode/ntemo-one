@@ -26,7 +26,7 @@ class EmployeeController extends Controller
     {
         $user = $request->user();
         $query = Employee::where('organization_id', $user->organization_id)
-            ->with(['department', 'position', 'manager']);
+            ->with(['department', 'position', 'manager', 'contracts']);
 
         // Si l'utilisateur a uniquement le droit d'équipe
         if (!$user->hasPermission('employees.view_all') && $user->hasPermission('employees.view_team')) {
