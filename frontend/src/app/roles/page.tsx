@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import AdminSidebar from "@/components/layout/AdminSidebar";
 import { hasPermission, useAuth } from "@/context/AuthContext";
 import { ApiError } from "@/lib/api";
+import RoleAssignmentPanel from "@/components/roles/RoleAssignmentPanel";
 import { roleService, type PermissionItem, type RoleSummary } from "@/lib/services/roleService";
 
 /* ── Libellés des modules (slug backend → libellé FR) ────────── */
@@ -46,7 +47,7 @@ export default function RolesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedRole, setExpandedRole] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "matrix">("list");
+  const [viewMode, setViewMode] = useState<"list" | "matrix" | "assign">("list");
 
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -126,7 +127,7 @@ export default function RolesPage() {
             </p>
           </div>
           <div className="flex items-center space-x-2 mt-4 md:mt-0">
-            {(["list", "matrix"] as const).map((mode) => (
+            {(["list", "matrix", "assign"] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
@@ -136,7 +137,7 @@ export default function RolesPage() {
                     : "text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >
-                {mode === "list" ? "📋 Liste des rôles" : "🔢 Matrice des permissions"}
+                {mode === "list" ? "📋 Liste des rôles" : mode === "matrix" ? "🔢 Matrice des permissions" : "👥 Attribution"}
               </button>
             ))}
           </div>
@@ -256,6 +257,19 @@ export default function RolesPage() {
                   );
                 })}
               </div>
+            )}
+
+            {/* ── VIEW: Attribution des rôles ─────────────── */}
+            {viewMode === "assign" && (
+              <RoleAssignmentPanel
+                roles={roles}
+                roleColor={roleColor}
+                onCountChange={(roleId, delta) =>
+                  setRoles((list) =>
+                    list.map((r) => (r.id === roleId ? { ...r, users_count: Math.max(0, r.users_count + delta) } : r)),
+                  )
+                }
+              />
             )}
 
             {/* ── VIEW: Permission Matrix ─────────────────── */}

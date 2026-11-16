@@ -107,6 +107,57 @@ class RoleController extends Controller
     }
 
     /**
+     * Utilisateurs de l'organisation avec leurs rôles (recherche nom / email / matricule).
+     */
+    public function users(Request $request): JsonResponse
+    {
+        $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'role_id' => ['nullable', 'uuid'],
+        ]);
+
+        $currentUser = $request->user();
+        $query = User::with(['roles:id,name,slug', 'employee.department'])->orderBy('name');
+
+        if (!$currentUser->hasRole('super_admin')) {
+            $query->where('organization_id', $currentUser->organization_id);
+        }
+
+        if ($search = $request->input('search')) {
+            $like = '%' . mb_strtolower($search) . '%';
+            $query->where(function ($q) use ($like) {
+                $q->whereRaw('LOWER(name) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(email) LIKE ?', [$like])
+                    ->orWhereHas('employee', fn ($e) => $e->whereRaw('LOWER(matricule) LIKE ?', [$like]));
+            });
+        }
+
+        if ($roleId = $request->input('role_id')) {
+            $query->whereHas('roles', fn ($r) => $r->where('roles.id', $roleId));
+        }
+
+        $users = $query->limit(100)->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $users->map(fn (User $u) => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+                'is_active' => (bool) $u->is_active,
+                'is_self' => $u->id === $currentUser->id,
+                'matricule' => $u->employee?->matricule,
+                'department' => $u->employee?->department?->name,
+                'roles' => $u->roles->map(fn ($r) => [
+                    'id' => $r->id,
+                    'name' => $r->name,
+                    'slug' => $r->slug,
+                ])->values(),
+            ]),
+        ]);
+    }
+
+    /**
      * Assigner un rôle à un utilisateur.
      */
     public function assignRole(Request $request): JsonResponse

@@ -100,6 +100,28 @@ class SettingsAndRolesTest extends TestCase
             ->assertJsonCount(3, 'data');
     }
 
+    public function test_admin_lists_organization_users_with_roles(): void
+    {
+        $this->makeUser($this->otherOrg, 'outsider@autre.local');
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/v1/roles/users')
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        $self = collect($response->json('data'))->firstWhere('email', 'admin@ntemo.local');
+        $this->assertTrue($self['is_self']);
+        $this->assertSame('direction_generale', $self['roles'][0]['slug']);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/v1/roles/users?search=EMP@')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.email', 'emp@ntemo.local');
+
+        $this->actingAs($this->employee, 'sanctum')->getJson('/api/v1/roles/users')->assertStatus(403);
+    }
+
     public function test_admin_assigns_and_revokes_role(): void
     {
         $this->actingAs($this->admin, 'sanctum')

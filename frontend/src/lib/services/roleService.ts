@@ -34,6 +34,18 @@ export interface RoleAssignmentResult {
   roles: string[];
 }
 
+export interface RoleUser {
+  id: string;
+  name: string;
+  email: string;
+  is_active: boolean;
+  /** true pour l'utilisateur connecté (ses rôles ne peuvent pas lui être retirés). */
+  is_self: boolean;
+  matricule: string | null;
+  department: string | null;
+  roles: { id: string; name: string; slug: string }[];
+}
+
 interface Envelope<T> {
   success: boolean;
   message?: string;
@@ -52,6 +64,11 @@ export const roleService = {
 
   async permissions(): Promise<PermissionItem[]> {
     const res = await apiClient.get<Envelope<PermissionItem[]>>('/permissions');
+    return res.data;
+  },
+
+  async users(params: { search?: string; role_id?: string } = {}): Promise<RoleUser[]> {
+    const res = await apiClient.get<Envelope<RoleUser[]>>('/roles/users', params);
     return res.data;
   },
 

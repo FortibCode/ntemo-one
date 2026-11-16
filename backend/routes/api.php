@@ -96,6 +96,7 @@ Route::prefix('v1')->group(function () {
             Route::middleware(EnsureUserHasPermission::class . ':roles.manage')->group(function () {
                 Route::get('/permissions', [RoleController::class, 'permissions']);
                 Route::get('/roles', [RoleController::class, 'index']);
+                Route::get('/roles/users', [RoleController::class, 'users']);
                 Route::post('/roles/assign', [RoleController::class, 'assignRole']);
                 Route::post('/roles/revoke', [RoleController::class, 'revokeRole']);
                 Route::get('/roles/{id}', [RoleController::class, 'show']);
