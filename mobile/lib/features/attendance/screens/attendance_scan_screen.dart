@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ntemo_one_mobile/core/api/api_client.dart';
 import 'package:ntemo_one_mobile/core/constants/app_constants.dart';
 import 'package:ntemo_one_mobile/features/attendance/screens/qr_scanner_screen.dart';
+import 'package:ntemo_one_mobile/features/attendance/widgets/attendance_history.dart';
 import 'package:ntemo_one_mobile/features/attendance/services/attendance_service.dart';
 
 class AttendanceScanScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
   String? _successMessage;
   String? _errorMessage;
   String _punchType = 'IN'; // IN, OUT
+  int _historyVersion = 0; // incrémenté après un pointage pour recharger l'historique
 
   @override
   void initState() {
@@ -53,6 +55,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
       final now = TimeOfDay.now();
       final time = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
       setState(() {
+        _historyVersion++;
         _successMessage = "Pointage validé avec succès (${_punchType == 'IN' ? 'Entrée' : 'Sortie'}) à $time !";
         _manualTokenController.clear();
       });
@@ -249,6 +252,8 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 32),
+          AttendanceHistory(key: ValueKey(_historyVersion), service: _attendanceService),
         ],
       ),
     );

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:ntemo_one_mobile/core/api/api_client.dart';
 import 'package:ntemo_one_mobile/core/auth/auth_controller.dart';
 import 'package:ntemo_one_mobile/core/auth/token_storage.dart';
@@ -8,11 +11,15 @@ import 'package:ntemo_one_mobile/features/attendance/screens/attendance_scan_scr
 import 'package:ntemo_one_mobile/features/auth/screens/login_screen.dart';
 import 'package:ntemo_one_mobile/features/badge/screens/virtual_badge_screen.dart';
 import 'package:ntemo_one_mobile/features/leaves/screens/leaves_screen.dart';
+import 'package:ntemo_one_mobile/features/notifications/screens/notifications_screen.dart';
+import 'package:ntemo_one_mobile/features/notifications/services/notifications_service.dart';
+import 'package:ntemo_one_mobile/features/tasks/screens/tasks_screen.dart';
 import 'package:ntemo_one_mobile/features/profile/screens/profile_screen.dart';
 import 'package:provider/provider.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('fr_FR');
   final apiClient = ApiClient(baseUrl: AppConstants.apiBaseUrl);
   final auth = AuthController(apiClient: apiClient, storage: SecureSessionStorage())..restore();
   runApp(NtemoOneApp(apiClient: apiClient, auth: auth));
@@ -81,8 +88,51 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _MainNavigationScreenState extends State<MainNavigationScreen> with WidgetsBindingObserver {
+  static const _pollInterval = Duration(seconds: 60);
+
   int _currentIndex = 0;
+  int _unread = 0;
+  late final NotificationsService _notifications;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _notifications = NotificationsService(apiClient: context.read<ApiClient>());
+    WidgetsBinding.instance.addObserver(this);
+    _refreshUnread();
+    _timer = Timer.periodic(_pollInterval, (_) => _refreshUnread());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Retour au premier plan : compteur à jour immédiatement
+    if (state == AppLifecycleState.resumed) _refreshUnread();
+  }
+
+  Future<void> _refreshUnread() async {
+    try {
+      final count = await _notifications.unreadCount();
+      if (mounted && count != _unread) setState(() => _unread = count);
+    } catch (_) {
+      // Réseau indisponible : le compteur sera mis à jour au prochain cycle
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => NotificationsScreen(service: _notifications)),
+    );
+    _refreshUnread();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +143,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
           child: Image.asset(
-            'assets/logo.png',
+            'assets/logo_hd.png',
             errorBuilder: (_, __, ___) => const Icon(Icons.business_center),
           ),
         ),
@@ -104,12 +154,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         elevation: 0.5,
+        actions: [
+          IconButton(
+            key: const Key('notifications-bell'),
+            tooltip: _unread > 0 ? '$_unread notification(s) non lue(s)' : 'Notifications',
+            onPressed: _openNotifications,
+            icon: Badge(
+              isLabelVisible: _unread > 0,
+              label: Text(_unread > 99 ? '99+' : '$_unread'),
+              child: const Icon(Icons.notifications_none_outlined),
+            ),
+          ),
+        ],
       ),
       body: IndexedStack(
         index: _currentIndex,
         children: [
           AttendanceScanScreen(apiClient: apiClient),
           VirtualBadgeScreen(apiClient: apiClient),
+          TasksScreen(apiClient: apiClient),
           LeavesScreen(apiClient: apiClient),
           ProfileScreen(apiClient: apiClient),
         ],
@@ -127,6 +190,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             icon: Icon(Icons.badge_outlined),
             selectedIcon: Icon(Icons.badge),
             label: 'Badge',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.task_alt_outlined),
+            selectedIcon: Icon(Icons.task_alt),
+            label: 'Tâches',
           ),
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
