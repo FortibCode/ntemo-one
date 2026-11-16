@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:ntemo_one_mobile/core/api/api_client.dart';
 import 'package:ntemo_one_mobile/features/badge/services/badge_service.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class VirtualBadgeScreen extends StatefulWidget {
   final ApiClient apiClient;
@@ -123,7 +124,7 @@ class _VirtualBadgeScreenState extends State<VirtualBadgeScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.2),
+                        color: Colors.green.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.greenAccent),
                       ),
@@ -182,7 +183,7 @@ class _VirtualBadgeScreenState extends State<VirtualBadgeScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -227,17 +228,22 @@ class _VirtualBadgeScreenState extends State<VirtualBadgeScreen> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(
-                      Icons.qr_code_2,
-                      size: 130,
-                      color: Colors.black87,
-                    ),
+                    child: badge.securityToken.isEmpty
+                        ? const Icon(Icons.qr_code_2, size: 160, color: Colors.black26)
+                        : QrImageView(
+                            data: badge.securityToken,
+                            version: QrVersions.auto,
+                            size: 180,
+                            gapless: true,
+                            errorCorrectionLevel: QrErrorCorrectLevel.M,
+                            semanticsLabel: 'QR code du badge virtuel',
+                          ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Center(
                   child: Text(
-                    'Jeton sécurisé : ${badge.securityToken.substring(0, 16)}...',
+                    'Jeton sécurisé : ${badge.securityToken.length > 16 ? '${badge.securityToken.substring(0, 16)}…' : badge.securityToken}',
                     style: const TextStyle(color: Colors.white38, fontSize: 11, fontFamily: 'monospace'),
                   ),
                 ),

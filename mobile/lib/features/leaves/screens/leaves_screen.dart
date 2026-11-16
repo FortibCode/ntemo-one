@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ntemo_one_mobile/core/constants/app_constants.dart';
 import 'package:ntemo_one_mobile/core/api/api_client.dart';
 import 'package:ntemo_one_mobile/features/leaves/services/leaves_service.dart';
 
@@ -53,6 +54,12 @@ class _LeavesScreenState extends State<LeavesScreen> {
     }
   }
 
+  static String _formatDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  static String _isoDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
   void _showNewRequestDialog() {
     if (_types.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -63,10 +70,11 @@ class _LeavesScreenState extends State<LeavesScreen> {
 
     String selectedTypeId = _types.first.id;
     final reasonController = TextEditingController();
-    DateTime startDate = DateTime.now().add(const Duration(days: 1));
-    DateTime endDate = DateTime.now().add(const Duration(days: 5));
+    final tomorrow = DateUtils.dateOnly(DateTime.now()).add(const Duration(days: 1));
+    DateTime startDate = tomorrow;
+    DateTime endDate = tomorrow.add(const Duration(days: 4));
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -79,7 +87,7 @@ class _LeavesScreenState extends State<LeavesScreen> {
                 const Text('Type de Congé', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: selectedTypeId,
+                  initialValue: selectedTypeId,
                   items: _types.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
                   onChanged: (val) {
                     if (val != null) setDialogState(() => selectedTypeId = val);
@@ -89,9 +97,30 @@ class _LeavesScreenState extends State<LeavesScreen> {
                 const SizedBox(height: 16),
                 const Text('Période souhaitée', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                Text(
-                  'Du ${startDate.toIso8601String().substring(0, 10)} au ${endDate.toIso8601String().substring(0, 10)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
+                OutlinedButton.icon(
+                  key: const Key('leave-date-range'),
+                  onPressed: () async {
+                    final today = DateUtils.dateOnly(DateTime.now());
+                    final picked = await showDateRangePicker(
+                      context: ctx,
+                      firstDate: today,
+                      lastDate: today.add(const Duration(days: 365)),
+                      initialDateRange: DateTimeRange(start: startDate, end: endDate),
+                      helpText: 'Période du congé',
+                      saveText: 'Valider',
+                    );
+                    if (picked != null) {
+                      setDialogState(() {
+                        startDate = picked.start;
+                        endDate = picked.end;
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.date_range),
+                  label: Text(
+                    'Du ${_formatDate(startDate)} au ${_formatDate(endDate)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 const Text('Motif de la demande', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -116,26 +145,23 @@ class _LeavesScreenState extends State<LeavesScreen> {
               onPressed: () async {
                 final reason = reasonController.text.trim();
                 if (reason.isEmpty) return;
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(ctx);
                 try {
                   await _leavesService.submitLeaveRequest(
                     leaveTypeId: selectedTypeId,
-                    startDate: startDate.toIso8601String().substring(0, 10),
-                    endDate: endDate.toIso8601String().substring(0, 10),
+                    startDate: _isoDate(startDate),
+                    endDate: _isoDate(endDate),
                     reason: reason,
                   );
-                  if (mounted) _loadData();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Demande de congé déposée avec succès !')),
-                    );
-                  }
+                  if (!mounted) return;
+                  _loadData();
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Demande de congé déposée avec succès !')),
+                  );
                 } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(e.toString())),
-                    );
-                  }
+                  if (!mounted) return;
+                  messenger.showSnackBar(SnackBar(content: Text(e.toString())));
                 }
               },
               child: const Text('Soumettre'),
@@ -169,7 +195,7 @@ class _LeavesScreenState extends State<LeavesScreen> {
         onPressed: _showNewRequestDialog,
         icon: const Icon(Icons.add),
         label: const Text('Demander un congé'),
-        backgroundColor: const Color(0xFF4F46E5),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: _isLoading
@@ -219,7 +245,7 @@ class _LeavesScreenState extends State<LeavesScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: _getStatusColor(req.status).withOpacity(0.1),
+                                        color: _getStatusColor(req.status).withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(8),
                                         border: Border.all(color: _getStatusColor(req.status)),
                                       ),
