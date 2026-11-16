@@ -25,4 +25,16 @@ class AppColors {
   static const Color accent = Color(0xFF38BDF8);
   static const Color navy = Color(0xFF0A2544);
   static const Color navyDeep = Color(0xFF061424);
+
+  // Couleurs extraites du logo (dégradé cyan → bleu nuit)
+  static const Color logoCyan = Color(0xFF1C9BD6);
+  static const Color logoBlue = Color(0xFF0D5C9E);
+  static const Color logoNavy = Color(0xFF0B2563);
+  static const Color logoMist = Color(0xFFD6EEF9);
+
+  static const LinearGradient logoGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [logoCyan, logoBlue, logoNavy],
+  );
 }
